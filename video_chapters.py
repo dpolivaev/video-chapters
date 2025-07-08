@@ -70,14 +70,38 @@ def download_subtitles(youtube_url: str, language: str = None, output_dir: str =
             preferred_lang = None
             
             if language:
-                # User specified a language - try to find it
-                if language in available_subs:
-                    preferred_lang = language
-                    print(f"🎯 Found requested language: {language}")
-                elif f"{language}-orig" in available_subs:
+                # User specified a language - try to find it with priority: original > standard > auto-translated
+                preferred_lang = None
+                
+                # 1. Try original version first
+                if f"{language}-orig" in available_subs:
                     preferred_lang = f"{language}-orig"
-                    print(f"🎯 Found requested language (original): {language}-orig")
+                    print(f"🎯 Found requested language: {language} (original)")
+                # 2. Try standard version
+                elif language in available_subs:
+                    preferred_lang = language
+                    print(f"🎯 Found requested language: {language} (standard)")
+                # 3. Try auto-translated versions
                 else:
+                    # Look for auto-translated versions: either X-{language} or {language}-X
+                    auto_candidates = []
+                    for lang_code in available_subs.keys():
+                        if '-' in lang_code and not lang_code.endswith('-orig'):
+                            parts = lang_code.split('-')
+                            if len(parts) == 2 and (parts[0] == language or parts[1] == language):
+                                auto_candidates.append(lang_code)
+                    
+                    if auto_candidates:
+                        # Prefer source language auto-translations (X-target) over target language auto-translations (target-X)
+                        source_translations = [lang for lang in auto_candidates if lang.endswith(f'-{language}')]
+                        if source_translations:
+                            preferred_lang = source_translations[0]
+                            print(f"🎯 Found requested language: {language} (auto-translated)")
+                        else:
+                            preferred_lang = auto_candidates[0]
+                            print(f"🎯 Found requested language: {language} (auto-translated)")
+                
+                if preferred_lang is None:
                     print(f"❌ ERROR: Requested language '{language}' not found!")
                     print("Available subtitle languages:")
                     for lang in available_subs.keys():
@@ -85,11 +109,70 @@ def download_subtitles(youtube_url: str, language: str = None, output_dir: str =
                     print(f"\nTry one of the available languages above.")
                     sys.exit(1)
             else:
-                # No language specified - use first available
-                preferred_lang = list(available_subs.keys())[0]
-                print(f"🎯 Auto-selected language: {preferred_lang}")
+                # No language specified - use smart selection
+                # Priority: 1) original languages (*-orig), 2) major languages, 3) first available
+                available_langs = list(available_subs.keys())
+                
+                # First, try to find original language subtitles (ending with -orig)
+                orig_langs = [lang for lang in available_langs if lang.endswith('-orig')]
+                if orig_langs:
+                    preferred_lang = orig_langs[0]
+                    print(f"🎯 Auto-selected language: {preferred_lang} (original)")
+                else:
+                    # If no original found, prioritize major languages
+                    major_langs = ['en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'uk', 'ja', 'ko', 'zh', 'ar']
+                    preferred_lang = None
+                    for major in major_langs:
+                        if major in available_langs:
+                            preferred_lang = major
+                            break
+                    
+                    # If no major language found, use first available
+                    if preferred_lang is None:
+                        preferred_lang = available_langs[0]
+                    
+                    print(f"🎯 Auto-selected language: {preferred_lang}")
+                
                 if len(available_subs) > 1:
-                    print("Available languages:", ", ".join(list(available_subs.keys())[:5]))
+                    # Group languages by type
+                    orig_langs = []
+                    regular_langs = []
+                    auto_langs = []
+                    
+                    # Track all base languages that have original or standard versions
+                    covered_langs = set()
+                    
+                    for lang in available_subs.keys():
+                        if lang.endswith('-orig'):
+                            base_lang = lang[:-5]  # Remove '-orig' suffix
+                            orig_langs.append(base_lang)
+                            covered_langs.add(base_lang)
+                        elif '-' not in lang:
+                            # Standard language (no hyphens)
+                            regular_langs.append(lang)
+                            covered_langs.add(lang)
+                    
+                    # Only add auto-translated languages if they don't have original or standard versions
+                    for lang in available_subs.keys():
+                        if '-' in lang and not lang.endswith('-orig'):
+                            base_lang = lang.split('-')[0]  # Get part before first '-'
+                            if base_lang not in covered_langs:
+                                auto_langs.append(base_lang)
+                                covered_langs.add(base_lang)
+                    
+                    # Sort each group alphabetically and remove duplicates
+                    orig_langs = sorted(set(orig_langs))
+                    regular_langs = sorted(set(regular_langs))
+                    auto_langs = sorted(set(auto_langs))
+                    
+                    # Display grouped languages
+                    print("Available languages:")
+                    if orig_langs:
+                        print(f"  Original: {', '.join(orig_langs)}")
+                    if regular_langs:
+                        print(f"  Standard: {', '.join(regular_langs)}")
+                    if auto_langs:
+                        print(f"  Auto-translated: {', '.join(auto_langs)}")
                     print("Use --language parameter to select a specific language.")
                 
         except Exception as e:
