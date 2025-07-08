@@ -350,28 +350,29 @@ def main():
         send_to_ai = True
         print("🤫 Quiet mode: automatically sending to Gemini...")
     else:
-        # Interactive mode: ask user about saving first
+        # Interactive mode: show first 10 lines, then ask user about saving
+        
+        # Show first 10 lines of the subtitle content
+        print("\n📄 First 10 lines of subtitles:")
+        print("-" * 40)
+        lines = subtitle_content.split('\n')
+        for i, line in enumerate(lines[:10], 1):
+            print(f"{i:2d}: {line}")
+        if len(lines) > 10:
+            print(f"... ({len(lines) - 10} more lines)")
+        print("-" * 40)
+        
         keep_file = ask_user_choice("💾 Save subtitle file?")
         
         # Save file immediately if requested
         if keep_file:
-            # Move file to current directory with a nice name
+            # Move file to current directory with a nice name and .txt extension
             safe_filename = re.sub(r'[^\w\s-]', '', os.path.basename(subtitle_file)).strip()
             safe_filename = re.sub(r'[-\s]+', '-', safe_filename)
-            new_path = f"subtitles-{safe_filename}"
+            new_path = f"subtitles-{safe_filename}.txt"
             
             shutil.copy2(subtitle_file, new_path)
             print(f"✅ File saved as: {new_path}")
-            
-            # Show first 10 lines of the saved file
-            print("\n📄 First 10 lines of the file:")
-            print("-" * 40)
-            with open(new_path, 'r', encoding='utf-8') as f:
-                for i, line in enumerate(f, 1):
-                    if i > 10:
-                        break
-                    print(f"{i:2d}: {line.rstrip()}")
-            print("-" * 40)
         
         # Now ask about sending to Gemini
         send_to_ai = ask_user_choice("🤖 Send subtitles to Gemini for processing?")
@@ -385,6 +386,28 @@ def main():
         print("GEMINI RESPONSE:")
         print("="*50)
         print(response)
+        
+        # In interactive mode, offer to save the response
+        if not args.quiet:
+            print("\n📄 First 10 lines of Gemini response:")
+            print("-" * 40)
+            response_lines = response.split('\n')
+            for i, line in enumerate(response_lines[:10], 1):
+                print(f"{i:2d}: {line}")
+            if len(response_lines) > 10:
+                print(f"... ({len(response_lines) - 10} more lines)")
+            print("-" * 40)
+            
+            save_response = ask_user_choice("💾 Save Gemini response?")
+            if save_response:
+                # Create a filename based on the original video
+                safe_filename = re.sub(r'[^\w\s-]', '', os.path.basename(subtitle_file)).strip()
+                safe_filename = re.sub(r'[-\s]+', '-', safe_filename)
+                response_path = f"chapters-{safe_filename}.txt"
+                
+                with open(response_path, 'w', encoding='utf-8') as f:
+                    f.write(response)
+                print(f"✅ Gemini response saved as: {response_path}")
     else:
         print("⏭️  Skipping Gemini processing.")
     
