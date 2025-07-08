@@ -31,12 +31,26 @@ import yt_dlp
 import google.generativeai as genai
 
 # ========================================
-# MODEL SETTINGS (easy to edit)
+# CONFIGURATION (easy to edit)
 # ========================================
+
+# Model settings
 DEFAULT_MODEL = 'gemini-2.5-pro'
 AVAILABLE_MODELS = [
     'gemini-2.5-pro', 
     'gemini-2.5-flash'
+]
+
+# Gemini prompt for generating chapter timecodes
+GEMINI_PROMPT = """Break down this video content into chapters 
+and generate timecodes in mm:ss format (e.g., 00:10, 05:30, 59:59, 1:01:03). 
+Each chapter should be formatted as: timecode - chapter title. 
+Generate the chapter titles in the same language as the subtitles."""
+
+# Major languages for auto-selection priority
+MAJOR_LANGUAGES = [
+    'en', 'es', 'fr', 'de', 'it', 'pt', 
+    'ru', 'uk', 'ja', 'ko', 'zh', 'ar'
 ]
 
 def download_subtitles(youtube_url: str, language: str = None, output_dir: str = None) -> str:
@@ -120,9 +134,8 @@ def download_subtitles(youtube_url: str, language: str = None, output_dir: str =
                     print(f"🎯 Auto-selected language: {preferred_lang} (original)")
                 else:
                     # If no original found, prioritize major languages
-                    major_langs = ['en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'uk', 'ja', 'ko', 'zh', 'ar']
                     preferred_lang = None
-                    for major in major_langs:
+                    for major in MAJOR_LANGUAGES:
                         if major in available_langs:
                             preferred_lang = major
                             break
@@ -269,10 +282,8 @@ def send_to_gemini(subtitle_content: str, api_key: str, model_name: str = None) 
         model = genai.GenerativeModel(model_name)
         
         # Language-agnostic prompt - Gemini will detect language automatically
-        prompt = "Break down this video content into chapters and generate timecodes in mm:ss format (e.g., 05:30, 12:45). Each chapter should start with time in mm:ss format - chapter title. Generate the chapter titles in the same language as the subtitles."
-        
         # Combine prompt with subtitle content
-        full_prompt = f"{prompt}\n\nSubtitles:\n{subtitle_content}"
+        full_prompt = f"{GEMINI_PROMPT}\n\nSubtitles:\n{subtitle_content}"
         
         # Generate response
         response = model.generate_content(full_prompt)
