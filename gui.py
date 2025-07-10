@@ -30,15 +30,33 @@ import re
 from core import VideoProcessor, ProcessingOptions, AVAILABLE_MODELS
 from config import config
 
+# Windows DPI awareness
+if sys.platform == "win32":
+    try:
+        import ctypes
+        # Make the application DPI aware
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+    except (ImportError, AttributeError, OSError):
+        try:
+            # Fallback for older Windows versions
+            ctypes.windll.user32.SetProcessDPIAware()
+        except (ImportError, AttributeError, OSError):
+            pass
+
 class ChapterTimecodeGUI:
     """Main GUI application for Chapter Timecodes."""
     
     def __init__(self):
         """Initialize the GUI."""
         self.root = tk.Tk()
-        self.root.title("Timecode Generator - Subtitle to Chapter Converter")
+        self.root.title("Chapter Timecodes - Video Subtitle to Chapter Converter")
+        
+        # Configure for better DPI handling
+        self.setup_dpi_scaling()
+        
+        # Set window size and constraints
         self.root.geometry(config.get_window_geometry())
-        self.root.minsize(800, 600)
+        self.root.minsize(900, 700)
         
         # Configure style
         self.setup_style()
@@ -60,18 +78,101 @@ class ChapterTimecodeGUI:
         # Bind events
         self.setup_bindings()
         
+    def setup_dpi_scaling(self):
+        """Configure DPI scaling for better appearance on high-DPI displays."""
+        if sys.platform == "win32":
+            # Windows DPI scaling
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                dpi = user32.GetDpiForSystem()
+                scaling_factor = dpi / 96.0  # 96 DPI is standard
+                
+                # Configure tkinter scaling
+                self.root.tk.call('tk', 'scaling', scaling_factor)
+                
+                # Set font scaling
+                self.font_scale = max(1.0, scaling_factor * 0.9)  # Slightly smaller than full scale
+                
+            except (ImportError, AttributeError, OSError):
+                self.font_scale = 1.0
+        elif sys.platform == "darwin":
+            # macOS handles DPI automatically, but we can detect retina displays
+            try:
+                # Check if we're on a retina display
+                import tkinter as tk
+                scaling = self.root.tk.call('tk', 'scaling')
+                if scaling > 1.4:  # Likely a retina display
+                    self.font_scale = 1.1  # Slightly larger fonts for retina
+                else:
+                    self.font_scale = 1.0
+            except:
+                self.font_scale = 1.0
+        else:
+            # Linux and other platforms
+            self.font_scale = 1.0
+        
     def setup_style(self):
         """Setup the GUI style."""
         style = ttk.Style()
         
-        # Configure styles for better appearance
-        style.configure('Title.TLabel', font=('Helvetica', 16, 'bold'))
-        style.configure('Section.TLabel', font=('Helvetica', 12, 'bold'))
-        style.configure('Info.TLabel', font=('Helvetica', 9), foreground='gray')
+        # Calculate scaled font sizes
+        title_size = int(16 * self.font_scale)
+        section_size = int(12 * self.font_scale)
+        info_size = int(9 * self.font_scale)
+        default_size = int(10 * self.font_scale)
         
-        # Configure notebook style
+        # Platform-specific font choices
+        if sys.platform == "win32":
+            ui_font = "Segoe UI"
+            mono_font = "Consolas"
+        elif sys.platform == "darwin":
+            ui_font = "SF Pro Text"
+            mono_font = "SF Mono"
+            # Fallback fonts for older macOS
+            try:
+                import tkinter.font as tkFont
+                available_fonts = tkFont.families()
+                if "SF Pro Text" not in available_fonts:
+                    ui_font = "Helvetica Neue"
+                if "SF Mono" not in available_fonts:
+                    mono_font = "Monaco"
+            except:
+                ui_font = "Helvetica Neue"
+                mono_font = "Monaco"
+        else:
+            # Linux and other platforms
+            ui_font = "Liberation Sans"
+            mono_font = "Liberation Mono"
+            # Fallback fonts
+            try:
+                import tkinter.font as tkFont
+                available_fonts = tkFont.families()
+                if "Liberation Sans" not in available_fonts:
+                    ui_font = "DejaVu Sans"
+                if "Liberation Mono" not in available_fonts:
+                    mono_font = "DejaVu Sans Mono"
+            except:
+                ui_font = "DejaVu Sans"
+                mono_font = "DejaVu Sans Mono"
+        
+        # Store fonts for later use
+        self.ui_font = ui_font
+        self.mono_font = mono_font
+        
+        # Configure styles for better appearance with DPI scaling
+        style.configure('Title.TLabel', font=(ui_font, title_size, 'bold'))
+        style.configure('Section.TLabel', font=(ui_font, section_size, 'bold'))
+        style.configure('Info.TLabel', font=(ui_font, info_size), foreground='gray')
+        
+        # Configure notebook style with scaled padding
+        padding = [int(20 * self.font_scale), int(10 * self.font_scale)]
         style.configure('Custom.TNotebook', tabposition='n')
-        style.configure('Custom.TNotebook.Tab', padding=[20, 10])
+        style.configure('Custom.TNotebook.Tab', padding=padding)
+        
+        # Configure default font for all widgets
+        default_font = (ui_font, default_size)
+        self.root.option_add('*Font', default_font)
         
     def setup_variables(self):
         """Setup tkinter variables."""
@@ -166,7 +267,9 @@ class ChapterTimecodeGUI:
         self.progress_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.progress_frame, text="Progress")
         
-        self.progress_text = scrolledtext.ScrolledText(self.progress_frame, height=15, width=80)
+        # Configure text widget with scaled font
+        text_font = (self.mono_font, int(10 * self.font_scale))
+        self.progress_text = scrolledtext.ScrolledText(self.progress_frame, height=15, width=80, font=text_font)
         self.progress_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Subtitles tab
@@ -222,8 +325,8 @@ class ChapterTimecodeGUI:
         
     def create_progress_tab(self, parent_frame):
         """Create and configure the progress tab."""
-        self.progress_text = scrolledtext.ScrolledText(parent_frame, height=15, width=80)
-        self.progress_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Progress text widget is already created in create_widgets()
+        # Just configure the bindings here
         self.progress_text.configure(selectbackground='#0078d4', selectforeground='white')
         self.progress_text.bind('<Key>', self._on_text_key)
         self.progress_text.bind('<Control-Key>', self._on_text_key)
@@ -235,8 +338,9 @@ class ChapterTimecodeGUI:
         
     def create_subtitles_tab(self, parent_frame):
         """Create and configure the subtitles tab."""
+        text_font = (self.mono_font, int(10 * self.font_scale))
         self.subtitles_text = scrolledtext.ScrolledText(parent_frame, height=12, width=80,
-                                                        wrap=tk.WORD, state=tk.NORMAL)
+                                                        wrap=tk.WORD, state=tk.NORMAL, font=text_font)
         self.subtitles_text.pack(fill=tk.BOTH, expand=True)
         self.subtitles_text.configure(selectbackground='#0078d4', selectforeground='white')
         self.subtitles_text.bind('<Key>', self._on_text_key)
@@ -253,8 +357,9 @@ class ChapterTimecodeGUI:
         
     def create_chapters_tab(self, parent_frame):
         """Create and configure the chapters tab."""
+        text_font = (self.mono_font, int(10 * self.font_scale))
         self.chapters_text = scrolledtext.ScrolledText(parent_frame, height=12, width=80,
-                                                       wrap=tk.WORD, state=tk.NORMAL)
+                                                       wrap=tk.WORD, state=tk.NORMAL, font=text_font)
         self.chapters_text.pack(fill=tk.BOTH, expand=True)
         self.chapters_text.configure(selectbackground='#0078d4', selectforeground='white')
         self.chapters_text.bind('<Key>', self._on_text_key)

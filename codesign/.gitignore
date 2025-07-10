@@ -1,0 +1,5 @@
+*
+!.gitignore
+!codesign-example.bat
+!sign-jars-on-mac.sh
+

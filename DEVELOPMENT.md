@@ -49,7 +49,7 @@ sudo apt-get install python3-tk python3-dev
 
 ```bash
 git clone <repository-url>
-cd timecodes
+cd video-chapters
 ```
 
 ### 2. Create Virtual Environment
@@ -94,7 +94,7 @@ python video_chapters.py --help
 ## Project Structure
 
 ```
-timecodes/
+video-chapters/
 ├── core.py              # Core processing logic
 ├── config.py            # Configuration and settings management
 ├── gui.py              # GUI application (tkinter)
@@ -107,6 +107,8 @@ timecodes/
 ├── DEVELOPMENT.md      # This file
 ├── LICENSE             # Apache 2.0 license
 ├── .gitignore          # Git ignore patterns
+├── codesign/           # Code signing configurations
+│   └── codesign.bat    # Windows code signing script
 └── venv/               # Virtual environment (ignored)
 ```
 
@@ -117,6 +119,7 @@ timecodes/
 - **`gui.py`**: Modern tkinter GUI with tabbed interface and real-time progress
 - **`video_chapters.py`**: Command-line interface using the core module
 - **`build_app.py`**: Automated build script for creating executables
+- **`codesign/codesign.bat`**: Windows code signing configuration (Windows only)
 
 ## Running the Applications
 
@@ -172,12 +175,6 @@ source venv/bin/activate
 # Build GUI application (default)
 python build_app.py
 
-# Build CLI application only (for developers)
-python build_app.py --cli-only
-
-# Build both GUI and CLI applications
-python build_app.py --both
-
 # Build without cleanup (keep build files)
 python build_app.py --no-clean
 ```
@@ -204,38 +201,11 @@ python build_app.py \
 #### Windows Code Signing
 
 ```bash
-# Build with code signing
-python build_app.py --sign --cert-path "path/to/certificate.p12" --cert-password "your_password"
-
-# Build with custom timestamp server
-python build_app.py \
-  --sign \
-  --cert-path "path/to/certificate.p12" \
-  --cert-password "your_password" \
-  --timestamp-url "http://timestamp.digicert.com"
+# Build with code signing (uses codesign/codesign.bat)
+python build_app.py --sign
 ```
 
-### Manual PyInstaller Build
-
-#### GUI Application
-
-```bash
-# macOS
-pyinstaller --onefile --windowed --name "YouTube Chapters" gui.py
-
-# Windows
-pyinstaller --onefile --windowed --name "YouTube Chapters" gui.py
-
-# Linux
-pyinstaller --onefile --windowed --name "YouTube Chapters" gui.py
-```
-
-#### CLI Application
-
-```bash
-# All platforms
-pyinstaller --onefile --name "youtube-chapters-cli" video_chapters.py
-```
+**Note**: Windows code signing configuration is done through the `codesign/codesign.bat` file. Edit this file to configure your certificate name and signtool path.
 
 ### Build Output
 
@@ -243,11 +213,11 @@ After building, executables will be in the `dist/` directory:
 
 ```
 dist/
-├── YouTube Chapters      # GUI app (macOS/Linux)
-├── YouTube Chapters.exe  # GUI app (Windows)
-├── YouTube Chapters.dmg  # Signed DMG (macOS, if --create-dmg used)
-├── youtube-chapters-cli  # CLI app (macOS/Linux)
-└── youtube-chapters-cli.exe  # CLI app (Windows)
+├── Chapter Timecodes      # GUI app (macOS/Linux)
+├── Chapter Timecodes.exe  # GUI app (Windows)
+├── Chapter Timecodes.dmg  # Signed DMG (macOS, if --create-dmg used)
+├── Chapter Timecodes/     # GUI app directory (when using --onedir)
+└── Chapter Timecodes.app/ # GUI app bundle (macOS)
 ```
 
 ## Code Signing Setup
@@ -348,7 +318,17 @@ signtool.exe /?
 # C:\Program Files (x86)\Windows Kits\10\bin\10.0.XXXXX.X\x64\
 ```
 
-#### 4. Test Signing
+#### 4. Configure codesign.bat
+
+1. Edit `codesign/codesign.bat` to configure your certificate:
+   ```batch
+   set CERT=Your Certificate Name
+   "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe" sign /a /n "%CERT%" /fd SHA256 /td SHA256 /tr http://time.certum.pl/ "%~dp0..\dist\*.exe"
+   ```
+
+2. Update the certificate name and signtool path as needed
+
+#### 5. Test Signing
 
 ```bash
 # Test with your certificate
@@ -365,8 +345,6 @@ python build_app.py --help
 
 **Build Options:**
 - `--gui-only`: Build GUI application only (default behavior)
-- `--cli-only`: Build CLI application only
-- `--both`: Build both GUI and CLI applications
 - `--no-clean`: Don't clean up build files
 
 **Signing Options:**
@@ -374,11 +352,10 @@ python build_app.py --help
 - `--signing-identity`: macOS code signing identity (can be partial name like "Your Name" or full identity)
 - `--notary-profile`: macOS notarization keychain profile
 - `--create-dmg`: Create DMG package (macOS)
-- `--cert-path`: Windows certificate file path
-- `--cert-password`: Windows certificate password
-- `--timestamp-url`: Timestamp server URL
 
-**Note:** By default, only the GUI application is built, as this is what end users typically need. The CLI application is primarily for developers who can run Python directly.
+**Note**: Windows code signing configuration is done through the `codesign/codesign.bat` file.
+
+**Note:** By default, only the GUI application is built, as this is what end users typically need. Developers can run the CLI application directly with Python: `python video_chapters.py`
 
 #### Example Production Builds
 
@@ -390,17 +367,11 @@ python build_app.py \
   --create-dmg \
   --notary-profile your-notary-profile
 
-# Windows: Signed build
-python build_app.py \
-  --sign \
-  --cert-path "certificates/code-signing.p12" \
-  --cert-password "your_secure_password"
+# Windows: Signed build (configure codesign/codesign.bat first)
+python build_app.py --sign
 
 # Cross-platform: GUI with signing
-python build_app.py \
-  --sign \
-  --signing-identity "Your Name" \
-  --cert-path "certificates/code-signing.p12"
+python build_app.py --sign --signing-identity "Your Name"
 ```
 
 ## Development Workflow
@@ -437,8 +408,8 @@ python video_chapters.py --check-languages "https://youtube.com/watch?v=dQw4w9Wg
 python build_app.py
 
 # Test built executables
-./dist/YouTube\ Chapters  # Test GUI (macOS/Linux)
-./dist/youtube-chapters-cli --help  # Test CLI
+./dist/Chapter\ Timecodes  # Test GUI (macOS/Linux)
+# Windows: dist/Chapter Timecodes.exe
 ```
 
 ### 4. Committing Changes
@@ -544,7 +515,7 @@ sudo apt-get install python3-secretstorage
 **Solution**:
 ```bash
 # Ensure you're in the correct directory
-pwd  # Should show .../timecodes
+pwd  # Should show .../video-chapters
 
 # Ensure virtual environment is activated
 which python  # Should show venv path
@@ -611,19 +582,19 @@ xcrun notarytool store-credentials your-notary-profile \
 
 **Solution**:
 ```bash
-# Use environment variable for password (more secure)
-set CERT_PASSWORD=your_password
-python build_app.py --sign --cert-path "cert.p12" --cert-password "%CERT_PASSWORD%"
+# Configure certificate in codesign/codesign.bat
+# Use certificate name instead of file path if installed in Windows certificate store
+set CERT=Your Certificate Name
 ```
 
 **Error**: `The specified timestamp server either could not be reached`
 
 **Solution**:
 ```bash
-# Try different timestamp servers:
-python build_app.py --sign --timestamp-url "http://timestamp.digicert.com"
-python build_app.py --sign --timestamp-url "http://timestamp.sectigo.com"
-python build_app.py --sign --timestamp-url "http://timestamp.globalsign.com/tsa/r6advanced1"
+# Edit codesign/codesign.bat to try different timestamp servers:
+# /tr http://timestamp.digicert.com/
+# /tr http://timestamp.sectigo.com/
+# /tr http://timestamp.globalsign.com/tsa/r6advanced1
 ```
 
 ### Debug Mode
@@ -697,11 +668,8 @@ python build_app.py \
   --create-dmg \
   --notary-profile your-notary-profile
 
-# Windows:
-python build_app.py \
-  --sign \
-  --cert-path "path/to/certificate.p12" \
-  --cert-password "your_password"
+# Windows (configure codesign/codesign.bat first):
+python build_app.py --sign
 ```
 
 ### 2. Create Release

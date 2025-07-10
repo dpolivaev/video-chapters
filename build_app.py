@@ -139,29 +139,19 @@ def create_dmg(app_path, dmg_path):
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
 
-def sign_windows_exe(exe_path, cert_path=None, cert_password=None, timestamp_url=None):
-    """Sign Windows executable."""
-    if not cert_path:
-        print("⚠️  No certificate provided, skipping code signing")
-        return True
-        
+def sign_windows_exe(exe_path):
+    """Sign Windows executable using codesign.bat."""
     print(f"🔐 Signing Windows exe: {exe_path}")
     
-    # Build signtool command
-    cmd = f'signtool.exe sign'
+    # Use the codesign.bat script
+    codesign_script = Path("codesign/codesign.bat")
     
-    if cert_path:
-        cmd += f' /f "{cert_path}"'
+    if not codesign_script.exists():
+        print("❌ codesign.bat not found in codesign/ directory")
+        return False
     
-    if cert_password:
-        cmd += f' /p "{cert_password}"'
-    
-    if timestamp_url:
-        cmd += f' /t "{timestamp_url}"'
-    else:
-        cmd += ' /t "http://timestamp.sectigo.com"'
-    
-    cmd += f' /v "{exe_path}"'
+    # Run the codesign.bat script
+    cmd = f'"{codesign_script.absolute()}"'
     
     if not run_command(cmd):
         print("❌ Failed to sign Windows executable")
@@ -248,7 +238,7 @@ def build_gui_app(args):
     elif sys.platform == "win32" and args.sign:
         exe_path = f"dist/{app_name}.exe"
         
-        if not sign_windows_exe(exe_path, args.cert_path, args.cert_password, args.timestamp_url):
+        if not sign_windows_exe(exe_path):
             return False
     
     return True
@@ -298,10 +288,7 @@ def main():
     parser.add_argument("--notary-profile", help="macOS notarization keychain profile")
     parser.add_argument("--create-dmg", action="store_true", help="Create DMG package (macOS)")
     
-    # Windows signing options
-    parser.add_argument("--cert-path", help="Windows certificate file path")
-    parser.add_argument("--cert-password", help="Windows certificate password")
-    parser.add_argument("--timestamp-url", help="Timestamp server URL")
+    # Windows signing options (certificate info is configured in codesign/codesign.bat)
     
     args = parser.parse_args()
     
