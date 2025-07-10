@@ -157,7 +157,7 @@ python video_chapters.py \
   --language en \
   --model gemini-2.5-flash \
   --keep-files \
-  --quiet \
+  --non-interactive \
   "https://youtube.com/watch?v=VIDEO_ID"
 ```
 
@@ -169,14 +169,14 @@ python video_chapters.py \
 # Activate virtual environment
 source venv/bin/activate
 
-# Build both GUI and CLI applications
+# Build GUI application (default)
 python build_app.py
 
-# Build GUI only
-python build_app.py --gui-only
-
-# Build CLI only
+# Build CLI application only (for developers)
 python build_app.py --cli-only
+
+# Build both GUI and CLI applications
+python build_app.py --both
 
 # Build without cleanup (keep build files)
 python build_app.py --no-clean
@@ -364,8 +364,9 @@ python build_app.py --help
 ```
 
 **Build Options:**
-- `--gui-only`: Build GUI application only
-- `--cli-only`: Build CLI application only  
+- `--gui-only`: Build GUI application only (default behavior)
+- `--cli-only`: Build CLI application only
+- `--both`: Build both GUI and CLI applications
 - `--no-clean`: Don't clean up build files
 
 **Signing Options:**
@@ -376,6 +377,8 @@ python build_app.py --help
 - `--cert-path`: Windows certificate file path
 - `--cert-password`: Windows certificate password
 - `--timestamp-url`: Timestamp server URL
+
+**Note:** By default, only the GUI application is built, as this is what end users typically need. The CLI application is primarily for developers who can run Python directly.
 
 #### Example Production Builds
 
@@ -393,9 +396,8 @@ python build_app.py \
   --cert-path "certificates/code-signing.p12" \
   --cert-password "your_secure_password"
 
-# Cross-platform: GUI only with signing
+# Cross-platform: GUI with signing
 python build_app.py \
-  --gui-only \
   --sign \
   --signing-identity "Your Name" \
   --cert-path "certificates/code-signing.p12"

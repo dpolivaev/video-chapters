@@ -15,7 +15,7 @@
 # limitations under the License.
 
 """
-Configuration management for YouTube Subtitles to Chapter Timecodes
+Configuration management for Video Subtitles to Chapter Timecodes
 """
 
 import json
@@ -26,8 +26,8 @@ import keyring
 from core import DEFAULT_MODEL, AVAILABLE_MODELS
 
 # Application name for keyring
-APP_NAME = "youtube-chapters"
-CONFIG_DIR = Path.home() / ".youtube-chapters"
+APP_NAME = "timecode-generator"
+CONFIG_DIR = Path.home() / ".timecode-generator"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 class Config:
@@ -49,7 +49,7 @@ class Config:
             "language": "",
             "keep_files": False,
             "show_subtitles": False,
-            "quiet": False,
+            "non_interactive": False,
             "output_dir": "",
             "window_geometry": "800x600",
             "last_url": ""
@@ -143,13 +143,13 @@ class Config:
         """Set show subtitles setting."""
         self.set_setting("show_subtitles", show_subtitles)
     
-    def get_quiet(self) -> bool:
-        """Get quiet setting."""
-        return self.get_setting("quiet", False)
+    def get_non_interactive(self) -> bool:
+        """Get non-interactive setting."""
+        return self.get_setting("non_interactive", False)
     
-    def set_quiet(self, quiet: bool):
-        """Set quiet setting."""
-        self.set_setting("quiet", quiet)
+    def set_non_interactive(self, non_interactive: bool):
+        """Set non-interactive setting."""
+        self.set_setting("non_interactive", non_interactive)
     
     def get_output_dir(self) -> str:
         """Get output directory setting."""

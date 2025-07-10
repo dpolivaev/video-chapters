@@ -15,17 +15,21 @@
 # limitations under the License.
 
 """
-Core functionality for YouTube Subtitles to Chapter Timecodes
+Core functionality for Video Subtitles to Chapter Timecodes
+Downloads video auto-generated subtitles and uses Google Gemini AI to generate
+chapter timecodes with semantic understanding.
 """
 
 import os
 import re
-import sys
 import tempfile
+import json
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple, Callable
+from typing import Dict, List, Optional, Tuple, Callable
+from dataclasses import dataclass, field
 import yt_dlp
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 # ========================================
 # CONFIGURATION
@@ -66,47 +70,58 @@ class ProcessingOptions:
                  keep_files: bool = False,
                  output_dir: Optional[str] = None,
                  show_subtitles: bool = False,
-                 quiet: bool = False):
+                 non_interactive: bool = False):
         self.language = language
         self.api_key = api_key
         self.model = model
         self.keep_files = keep_files
         self.output_dir = output_dir
         self.show_subtitles = show_subtitles
-        self.quiet = quiet
+        self.non_interactive = non_interactive
 
-class YouTubeProcessor:
-    """Main class for processing YouTube videos."""
+class VideoProcessor:
+    """Main class for processing video content to generate chapter timecodes."""
     
     def __init__(self, progress_callback: Optional[Callable[[str], None]] = None):
         """
         Initialize the processor.
         
         Args:
-            progress_callback: Optional callback function to report progress
+            progress_callback: Optional callback function for progress updates
         """
         self.progress_callback = progress_callback
         self.temp_files = []
-    
-    def _report_progress(self, message: str):
-        """Report progress to callback or print."""
+        
+    def log(self, message: str):
+        """Log a message, either via callback or print."""
         if self.progress_callback:
             self.progress_callback(message)
         else:
             print(message)
     
-    def get_available_languages(self, youtube_url: str) -> Dict[str, List[str]]:
+    def cleanup(self):
+        """Clean up temporary files."""
+        for temp_file in self.temp_files:
+            try:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+                    self.log(f"Removed temporary file: {temp_file}")
+            except OSError as e:
+                self.log(f"Warning: Could not remove {temp_file}: {e}")
+        self.temp_files.clear()
+    
+    def get_available_languages(self, video_url: str) -> Dict[str, List[str]]:
         """
-        Get available subtitle languages for a YouTube video.
+        Get available subtitle languages for a video.
         
         Args:
-            youtube_url: YouTube video URL
+            video_url: Video URL
             
         Returns:
-            Dictionary with language categories and their codes
+            Dictionary with language categories and available languages
         """
+        clean_url = self._clean_url(video_url)
         try:
-            clean_url = self._clean_url(youtube_url)
             info_opts = {'quiet': True}
             
             with yt_dlp.YoutubeDL(info_opts) as ydl:
@@ -146,7 +161,7 @@ class YouTubeProcessor:
                 }
                 
         except Exception as e:
-            self._report_progress(f"Error checking available languages: {e}")
+            self.log(f"Error checking available languages: {e}")
             return {}
     
     def _clean_url(self, url: str) -> str:
@@ -192,13 +207,13 @@ class YouTubeProcessor:
             # Finally, use first available
             return available_langs[0]
     
-    def download_subtitles(self, youtube_url: str, language: Optional[str] = None, 
+    def download_subtitles(self, video_url: str, language: Optional[str] = None, 
                          output_dir: Optional[str] = None) -> SubtitleInfo:
         """
-        Download auto-generated subtitles from YouTube video.
+        Download auto-generated subtitles from a video.
         
         Args:
-            youtube_url: YouTube video URL
+            video_url: Video URL
             language: Optional language code for subtitles
             output_dir: Directory to save subtitles
             
@@ -208,8 +223,8 @@ class YouTubeProcessor:
         if output_dir is None:
             output_dir = tempfile.mkdtemp()
         
-        clean_url = self._clean_url(youtube_url)
-        self._report_progress(f"Processing URL: {clean_url}")
+        clean_url = self._clean_url(video_url)
+        self.log(f"Processing URL: {clean_url}")
         
         # Check available subtitles
         info_opts = {'quiet': True}
@@ -223,7 +238,7 @@ class YouTubeProcessor:
                 
                 # Select language
                 selected_lang = self._select_language(available_subs, language)
-                self._report_progress(f"Selected language: {selected_lang}")
+                self.log(f"Selected language: {selected_lang}")
                 
             except Exception as e:
                 raise ValueError(f"Error checking subtitles: {e}")
@@ -255,7 +270,7 @@ class YouTubeProcessor:
                 with open(subtitle_file, 'r', encoding='utf-8') as f:
                     content = f.read()
                 
-                self._report_progress("Subtitles downloaded successfully")
+                self.log("Subtitles downloaded successfully")
                 
                 return SubtitleInfo(
                     language=selected_lang,
@@ -280,7 +295,7 @@ class YouTubeProcessor:
             AI-generated chapter timecodes with titles
         """
         try:
-            self._report_progress(f"Processing with {model_name}...")
+            self.log(f"Processing with {model_name}...")
             
             # Configure Gemini
             genai.configure(api_key=api_key)
@@ -294,7 +309,7 @@ class YouTubeProcessor:
             # Generate response
             response = model.generate_content(full_prompt)
             
-            self._report_progress("Processing completed successfully")
+            self.log("Processing completed successfully")
             
             return response.text
             
@@ -327,29 +342,12 @@ class YouTubeProcessor:
         except Exception as e:
             raise ValueError(f"Error saving file: {e}")
     
-    def cleanup(self):
-        """Clean up temporary files."""
-        for temp_file in self.temp_files:
-            try:
-                if os.path.exists(temp_file):
-                    os.remove(temp_file)
-                    temp_dir = os.path.dirname(temp_file)
-                    if temp_dir and os.path.exists(temp_dir):
-                        try:
-                            os.rmdir(temp_dir)
-                        except OSError:
-                            pass  # Directory not empty
-            except Exception:
-                pass  # Ignore cleanup errors
-        
-        self.temp_files.clear()
-    
-    def process_video(self, youtube_url: str, options: ProcessingOptions) -> Tuple[SubtitleInfo, Optional[str]]:
+    def process_video(self, video_url: str, options: ProcessingOptions) -> Tuple[SubtitleInfo, Optional[str]]:
         """
-        Process a YouTube video with the given options.
+        Process a video with the given options.
         
         Args:
-            youtube_url: YouTube video URL
+            video_url: Video URL
             options: Processing options
             
         Returns:
@@ -358,7 +356,7 @@ class YouTubeProcessor:
         try:
             # Download subtitles
             subtitle_info = self.download_subtitles(
-                youtube_url, 
+                video_url, 
                 options.language, 
                 options.output_dir
             )

@@ -15,19 +15,25 @@
 # limitations under the License.
 
 """
-YouTube Subtitles to Chapter Timecodes (CLI version)
-Downloads YouTube auto-generated subtitles and uses Google Gemini AI to generate 
-chapter timecodes with descriptive titles for video content.
+Video Subtitles to Chapter Timecodes (CLI version)
+Downloads video auto-generated subtitles and uses Google Gemini AI to generate
+chapter timecodes with semantic understanding.
+
+This is the command-line interface for the timecode generator.
+For GUI version, use gui.py instead.
+
+Example usage:
+    python video_chapters.py "https://www.youtube.com/watch?v=VIDEO_ID" --api-key YOUR_API_KEY
 """
 
 import argparse
-import os
-import re
-import shutil
 import sys
+import os
 from pathlib import Path
+from typing import Optional
 
-from core import YouTubeProcessor, ProcessingOptions, DEFAULT_MODEL, AVAILABLE_MODELS
+from core import VideoProcessor, ProcessingOptions, DEFAULT_MODEL, AVAILABLE_MODELS
+from config import config
 
 def ask_user_choice(question: str) -> bool:
     """
@@ -48,7 +54,7 @@ def ask_user_choice(question: str) -> bool:
         else:
             print("Please answer 'yes' or 'no'")
 
-def show_available_languages(processor: YouTubeProcessor, url: str):
+def show_available_languages(processor: VideoProcessor, url: str):
     """Show available languages for the video."""
     try:
         langs = processor.get_available_languages(url)
@@ -68,33 +74,36 @@ def show_available_languages(processor: YouTubeProcessor, url: str):
         print(f"Error checking languages: {e}")
 
 def main():
-    """Main function to generate chapter timecodes from YouTube subtitles."""
+    """Main function to generate chapter timecodes from video subtitles."""
     parser = argparse.ArgumentParser(
-        description='Download YouTube subtitles and generate chapter timecodes with Gemini AI'
+        description='Download video subtitles and generate chapter timecodes with Gemini AI'
     )
-    parser.add_argument('youtube_url', help='YouTube video URL')
-    parser.add_argument('--language', '-l', help='Language code for subtitles (e.g., ru, en, es). If not specified, uses first available language.')
-    parser.add_argument('--api-key', help='Gemini API key (or set GEMINI_API_KEY env var)')
-    parser.add_argument('--keep-files', action='store_true', help='Keep downloaded subtitle files')
-    parser.add_argument('--output-dir', help='Directory to save subtitle files')
-    parser.add_argument('--show-subtitles', action='store_true', help='Show subtitle content before processing')
-    parser.add_argument('--quiet', action='store_true', help='Run in non-interactive mode (auto-send to Gemini, don\'t save file)')
-    parser.add_argument('--model', default=DEFAULT_MODEL, 
-                       choices=AVAILABLE_MODELS,
+    parser.add_argument('video_url', help='Video URL (supports YouTube and other platforms)')
+    parser.add_argument('--api-key', help='Google Gemini API key')
+    parser.add_argument('--language', help='Subtitle language code (optional)')
+    parser.add_argument('--model', choices=AVAILABLE_MODELS, default=DEFAULT_MODEL,
                        help=f'Gemini model to use (default: {DEFAULT_MODEL})')
-    parser.add_argument('--check-languages', action='store_true', help='Check available languages and exit')
+    parser.add_argument('--keep-files', action='store_true', 
+                       help='Keep downloaded subtitle files')
+    parser.add_argument('--show-subtitles', action='store_true', 
+                       help='Display downloaded subtitles')
+    parser.add_argument('--output-dir', help='Output directory for files')
+    parser.add_argument('--non-interactive', action='store_true',
+                       help='Run without user prompts')
+    parser.add_argument('--check-languages', action='store_true',
+                       help='Only check available languages, do not process')
     
     args = parser.parse_args()
     
-    # Clean URL from shell escaping
-    clean_url = args.youtube_url.replace('\\?', '?').replace('\\=', '=').replace('\\&', '&')
-    if clean_url != args.youtube_url:
-        print(f"🔧 Fixed URL: {clean_url}")
+    # Clean URL (handle shell escaping)
+    clean_url = args.video_url.replace('\\?', '?').replace('\\=', '=').replace('\\&', '&')
+    if clean_url != args.video_url:
+        print(f"Cleaned URL: {clean_url}")
     
-    print(f"Processing YouTube URL: {clean_url}")
+    print(f"Processing video URL: {clean_url}")
     
     # Create processor
-    processor = YouTubeProcessor()
+    processor = VideoProcessor()
     
     # Check languages only if requested
     if args.check_languages:
@@ -115,7 +124,7 @@ def main():
         keep_files=args.keep_files,
         output_dir=args.output_dir,
         show_subtitles=args.show_subtitles,
-        quiet=args.quiet
+        non_interactive=args.non_interactive
     )
     
     try:
@@ -132,12 +141,12 @@ def main():
             print("="*50)
             print()
         
-        # Interactive or quiet mode
-        if args.quiet:
-            # Quiet mode: don't save file, auto-send to Gemini
+        # Interactive or non-interactive mode
+        if args.non_interactive:
+            # Non-interactive mode: don't save file, auto-send to Gemini
             keep_file = False
             send_to_ai = True
-            print("🤫 Quiet mode: automatically processed with Gemini...")
+            print("🤖 Non-interactive mode: automatically processed with Gemini...")
         else:
             # Interactive mode: show first 10 lines, then ask user about saving
             
@@ -156,8 +165,8 @@ def main():
             # Save file immediately if requested
             if keep_file:
                 # Save with a nice name and .txt extension
-                safe_filename = re.sub(r'[^\w\s-]', '', os.path.basename(subtitle_info.file_path)).strip()
-                safe_filename = re.sub(r'[-\s]+', '-', safe_filename)
+                safe_filename = os.path.basename(subtitle_info.file_path).strip()
+                safe_filename = os.path.splitext(safe_filename)[0] # Remove .txt extension
                 new_path = f"subtitles-{safe_filename}.txt"
                 
                 shutil.copy2(subtitle_info.file_path, new_path)
@@ -171,7 +180,7 @@ def main():
             print(gemini_response)
             
             # In interactive mode, offer to save the response
-            if not args.quiet:
+            if not args.non_interactive:
                 print("\n📄 First 10 lines of Gemini response:")
                 print("-" * 40)
                 response_lines = gemini_response.split('\n')
@@ -184,8 +193,8 @@ def main():
                 save_response = ask_user_choice("💾 Save Gemini response?")
                 if save_response:
                     # Create a filename based on the original video
-                    safe_filename = re.sub(r'[^\w\s-]', '', os.path.basename(subtitle_info.file_path)).strip()
-                    safe_filename = re.sub(r'[-\s]+', '-', safe_filename)
+                    safe_filename = os.path.basename(subtitle_info.file_path).strip()
+                    safe_filename = os.path.splitext(safe_filename)[0] # Remove .txt extension
                     response_path = f"chapters-{safe_filename}.txt"
                     
                     with open(response_path, 'w', encoding='utf-8') as f:

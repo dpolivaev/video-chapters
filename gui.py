@@ -15,7 +15,7 @@
 # limitations under the License.
 
 """
-GUI for YouTube Subtitles to Chapter Timecodes
+GUI for Video Subtitles to Chapter Timecodes
 """
 
 import tkinter as tk
@@ -27,16 +27,16 @@ from pathlib import Path
 from typing import Optional, Dict, List
 import re
 
-from core import YouTubeProcessor, ProcessingOptions, AVAILABLE_MODELS
+from core import VideoProcessor, ProcessingOptions, AVAILABLE_MODELS
 from config import config
 
-class YouTubeChaptersGUI:
-    """Main GUI application for YouTube Chapters."""
+class ChapterTimecodeGUI:
+    """Main GUI application for Chapter Timecodes."""
     
     def __init__(self):
         """Initialize the GUI."""
         self.root = tk.Tk()
-        self.root.title("YouTube Chapters - Subtitle to Timecode Generator")
+        self.root.title("Timecode Generator - Subtitle to Chapter Converter")
         self.root.geometry(config.get_window_geometry())
         self.root.minsize(800, 600)
         
@@ -81,7 +81,7 @@ class YouTubeChaptersGUI:
         self.model_var = tk.StringVar()
         self.keep_files_var = tk.BooleanVar()
         self.show_subtitles_var = tk.BooleanVar()
-        self.quiet_var = tk.BooleanVar()
+
         self.output_dir_var = tk.StringVar()
         self.progress_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Ready")
@@ -99,12 +99,12 @@ class YouTubeChaptersGUI:
         main_frame.rowconfigure(6, weight=1)
         
         # Title
-        title_label = ttk.Label(main_frame, text="YouTube Chapters Generator", 
+        title_label = ttk.Label(main_frame, text="Chapter Timecode Generator", 
                                style='Title.TLabel')
         title_label.grid(row=0, column=0, columnspan=3, pady=(0, 20))
         
         # URL input
-        ttk.Label(main_frame, text="YouTube URL:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="YouTube video URL:").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.url_entry = ttk.Entry(main_frame, textvariable=self.url_var, width=50)
         self.url_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=5, padx=(5, 0))
         
@@ -150,8 +150,6 @@ class YouTubeChaptersGUI:
                        variable=self.keep_files_var).grid(row=0, column=0, sticky=tk.W, padx=(0, 20))
         ttk.Checkbutton(options_frame, text="Show subtitles", 
                        variable=self.show_subtitles_var).grid(row=0, column=1, sticky=tk.W, padx=(0, 20))
-        ttk.Checkbutton(options_frame, text="Quiet mode", 
-                       variable=self.quiet_var).grid(row=0, column=2, sticky=tk.W, padx=(0, 20))
         
         # Output directory
         ttk.Label(options_frame, text="Output Dir:").grid(row=1, column=0, sticky=tk.W, pady=(10, 0))
@@ -175,22 +173,25 @@ class YouTubeChaptersGUI:
         self.subtitles_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.subtitles_frame, text="Subtitles")
         
-        self.subtitles_text = scrolledtext.ScrolledText(self.subtitles_frame, height=15, width=80)
-        self.subtitles_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
         # Chapters tab
         self.chapters_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.chapters_frame, text="Chapters")
         
-        self.chapters_text = scrolledtext.ScrolledText(self.chapters_frame, height=15, width=80)
-        self.chapters_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Create text widgets for each tab
+        self.create_progress_tab(self.progress_frame)
+        self.create_subtitles_tab(self.subtitles_frame)
+        self.create_chapters_tab(self.chapters_frame)
         
-        # Add save buttons to tabs
-        self.create_save_buttons()
+        # Configure text widgets for scrolling
+        self.setup_scrolling_widgets()
+        
+        # Create progress bar
+        self.progress_bar = ttk.Progressbar(main_frame, mode='indeterminate')
+        self.progress_bar.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(10, 0))
         
         # Control buttons
         control_frame = ttk.Frame(main_frame)
-        control_frame.grid(row=7, column=0, columnspan=3, pady=(10, 0))
+        control_frame.grid(row=8, column=0, columnspan=3, pady=(10, 0))
         
         self.process_btn = ttk.Button(control_frame, text="Process Video", 
                                      command=self.process_video)
@@ -200,13 +201,18 @@ class YouTubeChaptersGUI:
                                   command=self.stop_processing, state=tk.DISABLED)
         self.stop_btn.pack(side=tk.LEFT, padx=(0, 10))
         
-        self.clear_btn = ttk.Button(control_frame, text="Clear All", 
-                                   command=self.clear_all)
-        self.clear_btn.pack(side=tk.LEFT)
+        # Copy and Save buttons
+        self.copy_btn = ttk.Button(control_frame, text="Copy to Clipboard", 
+                                  command=self.copy_current_tab)
+        self.copy_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.save_btn = ttk.Button(control_frame, text="Save to File", 
+                                  command=self.save_current_tab)
+        self.save_btn.pack(side=tk.LEFT)
         
         # Status bar
         status_frame = ttk.Frame(main_frame)
-        status_frame.grid(row=8, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0))
+        status_frame.grid(row=9, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0))
         status_frame.columnconfigure(1, weight=1)
         
         ttk.Label(status_frame, text="Status:").pack(side=tk.LEFT)
@@ -214,23 +220,62 @@ class YouTubeChaptersGUI:
                                      style='Info.TLabel')
         self.status_label.pack(side=tk.LEFT, padx=(5, 0))
         
-        # Progress bar
-        self.progress_bar = ttk.Progressbar(status_frame, mode='indeterminate')
-        self.progress_bar.pack(side=tk.RIGHT, padx=(10, 0))
+    def create_progress_tab(self, parent_frame):
+        """Create and configure the progress tab."""
+        self.progress_text = scrolledtext.ScrolledText(parent_frame, height=15, width=80)
+        self.progress_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.progress_text.configure(selectbackground='#0078d4', selectforeground='white')
+        self.progress_text.bind('<Key>', self._on_text_key)
+        self.progress_text.bind('<Control-Key>', self._on_text_key)
+        self.progress_text.bind('<Button-2>', self._on_text_paste)
+        self.progress_text.bind('<Button-3>', self._on_text_paste)
+        self.progress_text.bind('<MouseWheel>', self._on_mousewheel)
+        self.progress_text.bind('<Button-4>', self._on_mousewheel)
+        self.progress_text.bind('<Button-5>', self._on_mousewheel)
         
-    def create_save_buttons(self):
-        """Create save buttons for each tab."""
-        # Subtitles save button
-        subtitles_btn_frame = ttk.Frame(self.subtitles_frame)
-        subtitles_btn_frame.pack(fill=tk.X, padx=5, pady=5)
-        ttk.Button(subtitles_btn_frame, text="Save Subtitles", 
-                  command=self.save_subtitles).pack(side=tk.RIGHT)
+    def create_subtitles_tab(self, parent_frame):
+        """Create and configure the subtitles tab."""
+        self.subtitles_text = scrolledtext.ScrolledText(parent_frame, height=12, width=80,
+                                                        wrap=tk.WORD, state=tk.NORMAL)
+        self.subtitles_text.pack(fill=tk.BOTH, expand=True)
+        self.subtitles_text.configure(selectbackground='#0078d4', selectforeground='white')
+        self.subtitles_text.bind('<Key>', self._on_text_key)
+        self.subtitles_text.bind('<Control-Key>', self._on_text_key)
+        self.subtitles_text.bind('<Button-2>', self._on_text_paste)
+        self.subtitles_text.bind('<Button-3>', self._on_text_paste)
+        self.subtitles_text.bind('<MouseWheel>', self._on_mousewheel)
+        self.subtitles_text.bind('<Button-4>', self._on_mousewheel)
+        self.subtitles_text.bind('<Button-5>', self._on_mousewheel)
         
-        # Chapters save button
-        chapters_btn_frame = ttk.Frame(self.chapters_frame)
-        chapters_btn_frame.pack(fill=tk.X, padx=5, pady=5)
-        ttk.Button(chapters_btn_frame, text="Save Chapters", 
-                  command=self.save_chapters).pack(side=tk.RIGHT)
+        # Add auto-scroll during selection
+        self.subtitles_text.bind('<B1-Motion>', self._on_drag_motion)
+        self.subtitles_text.bind('<ButtonRelease-1>', self._on_drag_end)
+        
+    def create_chapters_tab(self, parent_frame):
+        """Create and configure the chapters tab."""
+        self.chapters_text = scrolledtext.ScrolledText(parent_frame, height=12, width=80,
+                                                       wrap=tk.WORD, state=tk.NORMAL)
+        self.chapters_text.pack(fill=tk.BOTH, expand=True)
+        self.chapters_text.configure(selectbackground='#0078d4', selectforeground='white')
+        self.chapters_text.bind('<Key>', self._on_text_key)
+        self.chapters_text.bind('<Control-Key>', self._on_text_key)
+        self.chapters_text.bind('<Button-2>', self._on_text_paste)
+        self.chapters_text.bind('<Button-3>', self._on_text_paste)
+        self.chapters_text.bind('<MouseWheel>', self._on_mousewheel)
+        self.chapters_text.bind('<Button-4>', self._on_mousewheel)
+        self.chapters_text.bind('<Button-5>', self._on_mousewheel)
+        
+        # Add auto-scroll during selection
+        self.chapters_text.bind('<B1-Motion>', self._on_drag_motion)
+        self.chapters_text.bind('<ButtonRelease-1>', self._on_drag_end)
+        
+    def setup_scrolling_widgets(self):
+        """Configure text widgets for auto-scrolling."""
+        self.subtitles_text.bind('<B1-Motion>', self._on_drag_motion)
+        self.chapters_text.bind('<B1-Motion>', self._on_drag_motion)
+        
+        self.subtitles_text.bind('<ButtonRelease-1>', self._on_drag_end)
+        self.chapters_text.bind('<ButtonRelease-1>', self._on_drag_end)
         
     def setup_bindings(self):
         """Setup event bindings."""
@@ -242,7 +287,7 @@ class YouTubeChaptersGUI:
         self.language_var.trace_add("write", self.save_settings)
         self.keep_files_var.trace_add("write", self.save_settings)
         self.show_subtitles_var.trace_add("write", self.save_settings)
-        self.quiet_var.trace_add("write", self.save_settings)
+
         self.output_dir_var.trace_add("write", self.save_settings)
         
     def load_settings(self):
@@ -252,7 +297,7 @@ class YouTubeChaptersGUI:
         self.language_var.set(config.get_language() or "Auto-detect")
         self.keep_files_var.set(config.get_keep_files())
         self.show_subtitles_var.set(config.get_show_subtitles())
-        self.quiet_var.set(config.get_quiet())
+
         self.output_dir_var.set(config.get_output_dir())
         
         # Load API key
@@ -267,7 +312,7 @@ class YouTubeChaptersGUI:
         config.set_language(self.language_var.get() if self.language_var.get() != "Auto-detect" else "")
         config.set_keep_files(self.keep_files_var.get())
         config.set_show_subtitles(self.show_subtitles_var.get())
-        config.set_quiet(self.quiet_var.get())
+
         config.set_output_dir(self.output_dir_var.get())
         
     def save_api_key(self):
@@ -295,7 +340,7 @@ class YouTubeChaptersGUI:
         """Check available languages for the video."""
         url = self.url_var.get().strip()
         if not url:
-            messagebox.showwarning("Warning", "Please enter a YouTube URL first.")
+            messagebox.showwarning("Warning", "Please enter a YouTube video URL.")
             return
             
         def check_langs_thread():
@@ -303,7 +348,7 @@ class YouTubeChaptersGUI:
                 self.update_status("Checking available languages...")
                 self.check_langs_btn.config(state=tk.DISABLED)
                 
-                processor = YouTubeProcessor(self.log_progress)
+                processor = VideoProcessor(self.log_progress)
                 langs = processor.get_available_languages(url)
                 
                 # Update language combo
@@ -349,7 +394,7 @@ class YouTubeChaptersGUI:
         api_key = self.api_key_var.get().strip()
         
         if not url:
-            messagebox.showwarning("Warning", "Please enter a YouTube URL.")
+            messagebox.showwarning("Warning", "Please enter a YouTube video URL.")
             return
             
         if not api_key:
@@ -375,7 +420,7 @@ class YouTubeChaptersGUI:
             self.update_status("Processing video...")
             
             # Create processor
-            self.processor = YouTubeProcessor(self.log_progress)
+            self.processor = VideoProcessor(self.log_progress)
             
             # Create options
             options = ProcessingOptions(
@@ -384,8 +429,7 @@ class YouTubeChaptersGUI:
                 model=self.model_var.get(),
                 keep_files=self.keep_files_var.get(),
                 output_dir=self.output_dir_var.get() if self.output_dir_var.get() else None,
-                show_subtitles=self.show_subtitles_var.get(),
-                quiet=self.quiet_var.get()
+                show_subtitles=self.show_subtitles_var.get()
             )
             
             # Process video
@@ -427,15 +471,100 @@ class YouTubeChaptersGUI:
         """Show processing results."""
         # Show subtitles
         if subtitle_info:
+            self.subtitles_text.delete(1.0, tk.END)
             self.subtitles_text.insert(tk.END, subtitle_info.content)
             self.notebook.select(1)  # Switch to subtitles tab
             
         # Show chapters
         if gemini_response:
+            self.chapters_text.delete(1.0, tk.END)
             self.chapters_text.insert(tk.END, gemini_response)
             self.notebook.select(2)  # Switch to chapters tab
             
         self.update_status("Processing completed successfully!")
+        
+    def _on_mousewheel(self, event):
+        """Handle mouse wheel scrolling for text widgets."""
+        # Determine scroll direction and amount
+        if event.delta:
+            # Windows/Mac
+            delta = -1 * (event.delta / 120)
+        else:
+            # Linux
+            if event.num == 4:
+                delta = -1
+            elif event.num == 5:
+                delta = 1
+            else:
+                delta = 0
+        
+        # Scroll the text widget
+        event.widget.yview_scroll(int(delta), "units")
+        return "break"
+        
+    def _on_text_key(self, event):
+        """Handle key events for read-only text widgets (allow selection, prevent editing)."""
+        # Allow selection keys
+        if event.keysym in ('Left', 'Right', 'Up', 'Down', 'Home', 'End', 'Prior', 'Next',
+                           'Control_L', 'Control_R', 'Shift_L', 'Shift_R', 'Alt_L', 'Alt_R'):
+            return
+        
+        # Allow copy operations
+        if event.state & 0x4:  # Control key pressed
+            if event.keysym in ('c', 'C', 'a', 'A'):  # Ctrl+C (copy) or Ctrl+A (select all)
+                return
+        
+        # Block all other keys
+        return "break"
+        
+    def _on_text_paste(self, event):
+        """Block paste operations in read-only text widgets."""
+        return "break"
+        
+    def _on_drag_motion(self, event):
+        """Handle drag motion for auto-scrolling during text selection."""
+        widget = event.widget
+        
+        # Get widget dimensions
+        widget_height = widget.winfo_height()
+        
+        # Get mouse position relative to widget
+        mouse_y = event.y
+        
+        # Define scroll zones (top and bottom 20 pixels)
+        scroll_zone = 20
+        
+        # Auto-scroll when dragging near edges
+        if mouse_y < scroll_zone:
+            # Scroll up
+            widget.yview_scroll(-1, "units")
+        elif mouse_y > widget_height - scroll_zone:
+            # Scroll down
+            widget.yview_scroll(1, "units")
+        
+        # Schedule the next auto-scroll if still dragging
+        if hasattr(self, '_auto_scroll_after_id'):
+            self.root.after_cancel(self._auto_scroll_after_id)
+        
+        # Continue auto-scrolling while in scroll zone
+        if mouse_y < scroll_zone or mouse_y > widget_height - scroll_zone:
+            self._auto_scroll_after_id = self.root.after(50, lambda: self._continue_auto_scroll(widget, mouse_y, widget_height))
+        
+        return None  # Don't break the event chain
+        
+    def _continue_auto_scroll(self, widget, mouse_y, widget_height):
+        """Continue auto-scrolling during drag selection."""
+        scroll_zone = 20
+        
+        if mouse_y < scroll_zone:
+            widget.yview_scroll(-1, "units")
+        elif mouse_y > widget_height - scroll_zone:
+            widget.yview_scroll(1, "units")
+        
+    def _on_drag_end(self, event):
+        """Stop auto-scrolling when the mouse button is released."""
+        if hasattr(self, '_auto_scroll_after_id'):
+            self.root.after_cancel(self._auto_scroll_after_id)
         
     def show_error(self, error_message: str):
         """Show error message."""
@@ -448,30 +577,64 @@ class YouTubeChaptersGUI:
         self.subtitles_text.delete(1.0, tk.END)
         self.chapters_text.delete(1.0, tk.END)
         
-    def clear_all(self):
-        """Clear all fields and results."""
-        self.clear_results()
-        self.url_var.set("")
-        self.language_var.set("Auto-detect")
-        self.output_dir_var.set("")
+    def copy_current_tab(self):
+        """Copy content from the currently selected tab to clipboard."""
+        selected_tab = self.notebook.index(self.notebook.select())
         
-    def save_subtitles(self):
-        """Save subtitles to file."""
-        content = self.subtitles_text.get(1.0, tk.END).strip()
-        if not content:
-            messagebox.showwarning("Warning", "No subtitles to save.")
+        if selected_tab == 0: # Progress tab
+            content = self.progress_text.get(1.0, tk.END).strip()
+            tab_name = "Progress"
+        elif selected_tab == 1: # Subtitles tab
+            content = self.subtitles_text.get(1.0, tk.END).strip()
+            tab_name = "Subtitles"
+        elif selected_tab == 2: # Chapters tab
+            content = self.chapters_text.get(1.0, tk.END).strip()
+            tab_name = "Chapters"
+        else:
+            messagebox.showwarning("Warning", "No content to copy from this tab.")
             return
             
-        self.save_content(content, "subtitles", "Save Subtitles")
-        
-    def save_chapters(self):
-        """Save chapters to file."""
-        content = self.chapters_text.get(1.0, tk.END).strip()
         if not content:
-            messagebox.showwarning("Warning", "No chapters to save.")
+            messagebox.showwarning("Warning", f"No {tab_name} content to copy.")
             return
             
-        self.save_content(content, "chapters", "Save Chapters")
+        self.copy_to_clipboard(content, tab_name)
+        
+    def save_current_tab(self):
+        """Save content from the currently selected tab to a file."""
+        selected_tab = self.notebook.index(self.notebook.select())
+        
+        if selected_tab == 0: # Progress tab
+            content = self.progress_text.get(1.0, tk.END).strip()
+            default_name = "progress"
+            tab_name = "Progress"
+        elif selected_tab == 1: # Subtitles tab
+            content = self.subtitles_text.get(1.0, tk.END).strip()
+            default_name = "subtitles"
+            tab_name = "Subtitles"
+        elif selected_tab == 2: # Chapters tab
+            content = self.chapters_text.get(1.0, tk.END).strip()
+            default_name = "chapters"
+            tab_name = "Chapters"
+        else:
+            messagebox.showwarning("Warning", "No content to save from this tab.")
+            return
+            
+        if not content:
+            messagebox.showwarning("Warning", f"No {tab_name} content to save.")
+            return
+            
+        self.save_content(content, default_name, f"Save {tab_name}")
+        
+    def copy_to_clipboard(self, content: str, content_type: str):
+        """Copy content to system clipboard."""
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(content)
+            self.root.update()  # Make sure the clipboard is updated
+            messagebox.showinfo("Success", f"{content_type} copied to clipboard!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not copy to clipboard: {e}")
         
     def save_content(self, content: str, default_name: str, title: str):
         """Save content to file."""
@@ -479,7 +642,7 @@ class YouTubeChaptersGUI:
             title=title,
             defaultextension=".txt",
             filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
-            initialname=f"{default_name}.txt"
+            initialfile=f"{default_name}.txt"
         )
         
         if filename:
@@ -516,7 +679,7 @@ class YouTubeChaptersGUI:
 def main():
     """Main function for GUI application."""
     try:
-        app = YouTubeChaptersGUI()
+        app = ChapterTimecodeGUI()
         app.run()
     except Exception as e:
         messagebox.showerror("Error", f"Failed to start application: {e}")

@@ -11,7 +11,7 @@ A Python application that downloads YouTube auto-generated subtitles and uses Go
 - Automatically detects subtitle language and generates chapter titles in the same language
 - **Secure API Key Storage**: API keys are stored securely using your system's keyring
 - **Persistent Settings**: Your preferences are saved between sessions
-- Interactive and quiet modes
+- Interactive and non-interactive modes
 - Configurable Gemini models
 - Clean temporary file management
 
@@ -79,7 +79,7 @@ The GUI provides:
 - **Processing Options**: 
   - Keep files (don't delete temporary files)
   - Show subtitles (display in GUI)
-  - Quiet mode (minimal interaction)
+  - Non-interactive mode (minimal interaction)
 - **Results Tabs**: 
   - Progress: Real-time processing updates
   - Subtitles: Downloaded subtitle content
@@ -121,8 +121,8 @@ python video_chapters.py --language uk "https://www.youtube.com/watch?v=VIDEO_ID
 #### Examples with Different Options
 
 ```bash
-# Quiet mode (automatically generate chapters)
-python video_chapters.py --quiet "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+# Non-interactive mode (automatically generate chapters)
+python video_chapters.py --non-interactive "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
 # Save subtitles and use specific model with language selection
 python video_chapters.py --language en --keep-files --model gemini-2.5-flash "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -139,7 +139,7 @@ python video_chapters.py --language ru --keep-files --output-dir ./subtitles --m
 - `--language`, `-l`: Optional language code for subtitles (e.g., en, es, ru, uk). If not specified, uses first available language.
 - `--api-key`: Gemini API key (or set GEMINI_API_KEY env var)
 - `--model`: Gemini model to use (gemini-2.5-pro, gemini-2.5-flash)
-- `--quiet`: Run in non-interactive mode
+- `--non-interactive`: Run in non-interactive mode
 - `--keep-files`: Keep downloaded subtitle files
 - `--output-dir`: Directory to save subtitle files
 - `--show-subtitles`: Show subtitle content before processing
