@@ -14,19 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Configuration management for Video Subtitles to Chapter Timecodes
-"""
+"""Configuration management for Chapter Timecode Generator."""
 
-import json
 import os
+import sys
+import keyring
 from pathlib import Path
 from typing import Optional, Dict, Any
-import keyring
+import json
 from core import DEFAULT_MODEL, AVAILABLE_MODELS
 
-# Application name for keyring
+# Application information
 APP_NAME = "timecode-generator"
+APP_VERSION = "2.0.0"
+APP_TITLE = "Chapter Timecode Generator"
+APP_AUTHOR = "Dimitry Polivaev"
+APP_COPYRIGHT = "Copyright 2025 Dimitry Polivaev"
+APP_LICENSE = "Apache License 2.0"
+APP_URL = "https://github.com/dimitrypolivaev/timecodes"
+
+# Application name for keyring
 CONFIG_DIR = Path.home() / ".timecode-generator"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
@@ -160,12 +167,37 @@ class Config:
         self.set_setting("output_dir", output_dir)
     
     def get_window_geometry(self) -> str:
-        """Get window geometry setting."""
-        return self.get_setting("window_geometry", "800x600")
+        """Get window geometry."""
+        return self.get_setting("window_geometry", "1000x700")
     
     def set_window_geometry(self, geometry: str):
-        """Set window geometry setting."""
+        """Set window geometry."""
         self.set_setting("window_geometry", geometry)
+    
+    # App information methods
+    def get_app_version(self) -> str:
+        """Get app version."""
+        return APP_VERSION
+    
+    def get_app_title(self) -> str:
+        """Get app title."""
+        return APP_TITLE
+    
+    def get_app_author(self) -> str:
+        """Get app author."""
+        return APP_AUTHOR
+    
+    def get_app_copyright(self) -> str:
+        """Get app copyright."""
+        return APP_COPYRIGHT
+    
+    def get_app_license(self) -> str:
+        """Get app license."""
+        return APP_LICENSE
+    
+    def get_app_url(self) -> str:
+        """Get app URL."""
+        return APP_URL
     
     def get_last_url(self) -> str:
         """Get last used URL."""

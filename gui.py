@@ -21,8 +21,8 @@ GUI for Video Subtitles to Chapter Timecodes
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, scrolledtext
 import threading
-import os
 import sys
+import os
 from pathlib import Path
 from typing import Optional, Dict, List
 import re
@@ -61,22 +61,20 @@ class ChapterTimecodeGUI:
         # Configure style
         self.setup_style()
         
-        # Initialize processor
-        self.processor = None
-        self.processing_thread = None
-        self.available_languages = {}
-        
-        # Variables
+        # Setup variables
         self.setup_variables()
         
-        # Create GUI
+        # Create menu bar
+        self.create_menu_bar()
+        
+        # Create main widgets
         self.create_widgets()
+        
+        # Setup bindings
+        self.setup_bindings()
         
         # Load saved settings
         self.load_settings()
-        
-        # Bind events
-        self.setup_bindings()
         
     def setup_dpi_scaling(self):
         """Configure DPI scaling for better appearance on high-DPI displays."""
@@ -175,20 +173,32 @@ class ChapterTimecodeGUI:
         self.root.option_add('*Font', default_font)
         
     def setup_variables(self):
-        """Setup tkinter variables."""
+        """Setup GUI variables."""
         self.url_var = tk.StringVar()
         self.api_key_var = tk.StringVar()
         self.language_var = tk.StringVar()
         self.model_var = tk.StringVar()
         self.keep_files_var = tk.BooleanVar()
-        self.show_subtitles_var = tk.BooleanVar()
-
         self.output_dir_var = tk.StringVar()
         self.progress_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Ready")
         
+        self.processor = None
+        self.processing_thread = None
+        self.available_languages = {}
+        
+    def create_menu_bar(self):
+        """Create the main menu bar."""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+
+        # Help menu
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="About", command=self.show_about)
+
     def create_widgets(self):
-        """Create the main GUI widgets."""
+        """Create main GUI widgets."""
         # Main container
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -200,7 +210,7 @@ class ChapterTimecodeGUI:
         main_frame.rowconfigure(6, weight=1)
         
         # Title
-        title_label = ttk.Label(main_frame, text="Chapter Timecode Generator", 
+        title_label = ttk.Label(main_frame, text=config.get_app_title(), 
                                style='Title.TLabel')
         title_label.grid(row=0, column=0, columnspan=3, pady=(0, 20))
         
@@ -216,18 +226,15 @@ class ChapterTimecodeGUI:
         
         # API Key input
         ttk.Label(main_frame, text="Gemini API Key:").grid(row=2, column=0, sticky=tk.W, pady=5)
-        self.api_key_entry = ttk.Entry(main_frame, textvariable=self.api_key_var, 
-                                      show="*", width=50)
+        self.api_key_entry = ttk.Entry(main_frame, textvariable=self.api_key_var, width=50, show="*")
         self.api_key_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=5, padx=(5, 0))
         
         # API Key buttons
         api_key_frame = ttk.Frame(main_frame)
         api_key_frame.grid(row=2, column=2, pady=5, padx=(5, 0))
         
-        ttk.Button(api_key_frame, text="Save", 
-                  command=self.save_api_key).pack(side=tk.LEFT, padx=(0, 2))
-        ttk.Button(api_key_frame, text="Clear", 
-                  command=self.clear_api_key).pack(side=tk.LEFT)
+        ttk.Button(api_key_frame, text="Delete API Key", 
+                   command=self.clear_api_key).pack(side=tk.LEFT)
         
         # Language selection
         ttk.Label(main_frame, text="Language:").grid(row=3, column=0, sticky=tk.W, pady=5)
@@ -249,8 +256,6 @@ class ChapterTimecodeGUI:
         # Checkboxes
         ttk.Checkbutton(options_frame, text="Keep files", 
                        variable=self.keep_files_var).grid(row=0, column=0, sticky=tk.W, padx=(0, 20))
-        ttk.Checkbutton(options_frame, text="Show subtitles", 
-                       variable=self.show_subtitles_var).grid(row=0, column=1, sticky=tk.W, padx=(0, 20))
         
         # Output directory
         ttk.Label(options_frame, text="Output Dir:").grid(row=1, column=0, sticky=tk.W, pady=(10, 0))
@@ -325,8 +330,7 @@ class ChapterTimecodeGUI:
         
     def create_progress_tab(self, parent_frame):
         """Create and configure the progress tab."""
-        # Progress text widget is already created in create_widgets()
-        # Just configure the bindings here
+
         self.progress_text.configure(selectbackground='#0078d4', selectforeground='white')
         self.progress_text.bind('<Key>', self._on_text_key)
         self.progress_text.bind('<Control-Key>', self._on_text_key)
@@ -351,7 +355,6 @@ class ChapterTimecodeGUI:
         self.subtitles_text.bind('<Button-4>', self._on_mousewheel)
         self.subtitles_text.bind('<Button-5>', self._on_mousewheel)
         
-        # Add auto-scroll during selection
         self.subtitles_text.bind('<B1-Motion>', self._on_drag_motion)
         self.subtitles_text.bind('<ButtonRelease-1>', self._on_drag_end)
         
@@ -370,7 +373,6 @@ class ChapterTimecodeGUI:
         self.chapters_text.bind('<Button-4>', self._on_mousewheel)
         self.chapters_text.bind('<Button-5>', self._on_mousewheel)
         
-        # Add auto-scroll during selection
         self.chapters_text.bind('<B1-Motion>', self._on_drag_motion)
         self.chapters_text.bind('<ButtonRelease-1>', self._on_drag_end)
         
@@ -386,14 +388,13 @@ class ChapterTimecodeGUI:
         """Setup event bindings."""
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        # Auto-save settings on change
         self.url_var.trace_add("write", self.save_settings)
         self.model_var.trace_add("write", self.save_settings)
         self.language_var.trace_add("write", self.save_settings)
         self.keep_files_var.trace_add("write", self.save_settings)
-        self.show_subtitles_var.trace_add("write", self.save_settings)
-
         self.output_dir_var.trace_add("write", self.save_settings)
+        
+        self.api_key_var.trace_add("write", self.save_api_key_auto)
         
     def load_settings(self):
         """Load settings from config."""
@@ -401,11 +402,9 @@ class ChapterTimecodeGUI:
         self.model_var.set(config.get_model())
         self.language_var.set(config.get_language() or "Auto-detect")
         self.keep_files_var.set(config.get_keep_files())
-        self.show_subtitles_var.set(config.get_show_subtitles())
-
+        
         self.output_dir_var.set(config.get_output_dir())
         
-        # Load API key
         api_key = config.get_api_key()
         if api_key:
             self.api_key_var.set(api_key)
@@ -416,18 +415,14 @@ class ChapterTimecodeGUI:
         config.set_model(self.model_var.get())
         config.set_language(self.language_var.get() if self.language_var.get() != "Auto-detect" else "")
         config.set_keep_files(self.keep_files_var.get())
-        config.set_show_subtitles(self.show_subtitles_var.get())
-
+        
         config.set_output_dir(self.output_dir_var.get())
         
-    def save_api_key(self):
-        """Save API key to secure storage."""
+    def save_api_key_auto(self, *args):
+        """Auto-save API key to secure storage."""
         api_key = self.api_key_var.get().strip()
         if api_key:
             config.set_api_key(api_key)
-            messagebox.showinfo("Success", "API key saved securely!")
-        else:
-            messagebox.showwarning("Warning", "Please enter an API key first.")
             
     def clear_api_key(self):
         """Clear API key from secure storage."""
@@ -456,7 +451,6 @@ class ChapterTimecodeGUI:
                 processor = VideoProcessor(self.log_progress)
                 langs = processor.get_available_languages(url)
                 
-                # Update language combo
                 self.root.after(0, self.update_language_combo, langs)
                 
             except Exception as e:
@@ -534,7 +528,7 @@ class ChapterTimecodeGUI:
                 model=self.model_var.get(),
                 keep_files=self.keep_files_var.get(),
                 output_dir=self.output_dir_var.get() if self.output_dir_var.get() else None,
-                show_subtitles=self.show_subtitles_var.get()
+                show_subtitles=False
             )
             
             # Process video
@@ -780,6 +774,121 @@ class ChapterTimecodeGUI:
     def run(self):
         """Run the GUI application."""
         self.root.mainloop()
+
+    def show_about(self):
+        """Show the About dialog."""
+        about_window = tk.Toplevel(self.root)
+        about_window.title("About Chapter Timecode Generator")
+        about_window.geometry("500x400")
+        about_window.resizable(False, False)
+        
+        # Center the window
+        about_window.transient(self.root)
+        about_window.grab_set()
+        
+        # Main frame
+        main_frame = ttk.Frame(about_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # App info
+        title_label = ttk.Label(main_frame, text=config.get_app_title(), 
+                               style='Title.TLabel')
+        title_label.pack(pady=(0, 5))
+        
+        version_label = ttk.Label(main_frame, text=f"Version: {config.get_app_version()}")
+        version_label.pack()
+        
+        copyright_label = ttk.Label(main_frame, text=config.get_app_copyright())
+        copyright_label.pack(pady=(10, 0))
+        
+        license_label = ttk.Label(main_frame, text=f"License: {config.get_app_license()}")
+        license_label.pack(pady=(5, 0))
+        
+        # Description
+        desc_text = ("A tool for generating chapter timecodes from video subtitles "
+                    "using Google's Gemini AI to create meaningful chapter markers.")
+        desc_label = ttk.Label(main_frame, text=desc_text, wraplength=450, justify=tk.CENTER)
+        desc_label.pack(pady=(15, 0))
+        
+        # Buttons frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=(20, 0))
+        
+        # View License button
+        license_btn = ttk.Button(button_frame, text="View License", 
+                                command=lambda: self.show_license())
+        license_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Close button
+        close_btn = ttk.Button(button_frame, text="Close", 
+                              command=about_window.destroy)
+        close_btn.pack(side=tk.LEFT)
+        
+        # Center the window on parent
+        about_window.update_idletasks()
+        x = (self.root.winfo_x() + (self.root.winfo_width() // 2) - 
+             (about_window.winfo_width() // 2))
+        y = (self.root.winfo_y() + (self.root.winfo_height() // 2) - 
+             (about_window.winfo_height() // 2))
+        about_window.geometry(f"+{x}+{y}")
+        
+    def show_license(self):
+        """Show the full license text."""
+        license_window = tk.Toplevel(self.root)
+        license_window.title("License - Apache License 2.0")
+        license_window.geometry("700x500")
+        
+        # Center the window
+        license_window.transient(self.root)
+        license_window.grab_set()
+        
+        # Main frame
+        main_frame = ttk.Frame(license_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # License text
+        license_text = scrolledtext.ScrolledText(main_frame, wrap=tk.WORD, 
+                                                font=("Courier", 10))
+        license_text.pack(fill=tk.BOTH, expand=True)
+        
+        # Try to read license file
+        try:
+            license_path = Path("LICENSE")
+            if license_path.exists():
+                with open(license_path, 'r', encoding='utf-8') as f:
+                    license_content = f.read()
+            else:
+                license_content = """License file not found.
+
+This software is licensed under the Apache License 2.0.
+You can view the full license text at:
+http://www.apache.org/licenses/LICENSE-2.0
+
+Copyright 2025 Dimitry Polivaev"""
+        except Exception as e:
+            license_content = f"""Error reading license file: {e}
+
+This software is licensed under the Apache License 2.0.
+You can view the full license text at:
+http://www.apache.org/licenses/LICENSE-2.0
+
+Copyright 2025 Dimitry Polivaev"""
+        
+        license_text.insert(tk.END, license_content)
+        license_text.config(state=tk.DISABLED)
+        
+        # Close button
+        close_btn = ttk.Button(main_frame, text="Close", 
+                              command=license_window.destroy)
+        close_btn.pack(pady=(10, 0))
+        
+        # Center the window on parent
+        license_window.update_idletasks()
+        x = (self.root.winfo_x() + (self.root.winfo_width() // 2) - 
+             (license_window.winfo_width() // 2))
+        y = (self.root.winfo_y() + (self.root.winfo_height() // 2) - 
+             (license_window.winfo_height() // 2))
+        license_window.geometry(f"+{x}+{y}")
 
 def main():
     """Main function for GUI application."""
