@@ -15,7 +15,7 @@
 # limitations under the License.
 
 """
-YouTube Subtitles to Chapter Timecodes
+YouTube Subtitles to Chapter Timecodes (CLI version)
 Downloads YouTube auto-generated subtitles and uses Google Gemini AI to generate 
 chapter timecodes with descriptive titles for video content.
 """
@@ -25,219 +25,9 @@ import os
 import re
 import shutil
 import sys
-import tempfile
 from pathlib import Path
-import yt_dlp
-import google.generativeai as genai
 
-# ========================================
-# CONFIGURATION (easy to edit)
-# ========================================
-
-# Model settings
-DEFAULT_MODEL = 'gemini-2.5-pro'
-AVAILABLE_MODELS = [
-    'gemini-2.5-pro', 
-    'gemini-2.5-flash'
-]
-
-# Gemini prompt for generating chapter timecodes
-GEMINI_PROMPT = """Break down this video content into chapters 
-and generate timecodes in mm:ss format (e.g., 00:10, 05:30, 59:59, 1:01:03). 
-Each chapter should be formatted as: timecode - chapter title. 
-Generate the chapter titles in the same language as the subtitles."""
-
-# Major languages for auto-selection priority
-MAJOR_LANGUAGES = [
-    'en', 'es', 'fr', 'de', 'it', 'pt', 
-    'ru', 'uk', 'ja', 'ko', 'zh', 'ar'
-]
-
-def download_subtitles(youtube_url: str, language: str = None, output_dir: str = None) -> str:
-    """
-    Download auto-generated subtitles from YouTube video.
-    
-    Args:
-        youtube_url: YouTube video URL
-        language: Optional language code for subtitles (e.g., 'ru', 'en', 'es')
-        output_dir: Directory to save subtitles (optional)
-    
-    Returns:
-        Path to the downloaded subtitle file
-    """
-    if output_dir is None:
-        output_dir = tempfile.mkdtemp()
-    
-    # First, check what subtitles are available
-    info_opts = {'quiet': True}
-    with yt_dlp.YoutubeDL(info_opts) as ydl:
-        try:
-            info = ydl.extract_info(youtube_url, download=False)
-            available_subs = info.get('automatic_captions', {})
-            
-            if not available_subs:
-                print("❌ ERROR: No auto-generated subtitles found!")
-                print("This video doesn't have auto-generated captions available.")
-                sys.exit(1)
-            
-            # Language selection logic
-            preferred_lang = None
-            
-            if language:
-                # User specified a language - try to find it with priority: original > standard > auto-translated
-                preferred_lang = None
-                
-                # 1. Try original version first
-                if f"{language}-orig" in available_subs:
-                    preferred_lang = f"{language}-orig"
-                    print(f"🎯 Found requested language: {language} (original)")
-                # 2. Try standard version
-                elif language in available_subs:
-                    preferred_lang = language
-                    print(f"🎯 Found requested language: {language} (standard)")
-                # 3. Try auto-translated versions
-                else:
-                    # Look for auto-translated versions: either X-{language} or {language}-X
-                    auto_candidates = []
-                    for lang_code in available_subs.keys():
-                        if '-' in lang_code and not lang_code.endswith('-orig'):
-                            parts = lang_code.split('-')
-                            if len(parts) == 2 and (parts[0] == language or parts[1] == language):
-                                auto_candidates.append(lang_code)
-                    
-                    if auto_candidates:
-                        # Prefer source language auto-translations (X-target) over target language auto-translations (target-X)
-                        source_translations = [lang for lang in auto_candidates if lang.endswith(f'-{language}')]
-                        if source_translations:
-                            preferred_lang = source_translations[0]
-                            print(f"🎯 Found requested language: {language} (auto-translated)")
-                        else:
-                            preferred_lang = auto_candidates[0]
-                            print(f"🎯 Found requested language: {language} (auto-translated)")
-                
-                if preferred_lang is None:
-                    print(f"❌ ERROR: Requested language '{language}' not found!")
-                    print("Available subtitle languages:")
-                    for lang in available_subs.keys():
-                        print(f"  - {lang}")
-                    print(f"\nTry one of the available languages above.")
-                    sys.exit(1)
-            else:
-                # No language specified - use smart selection
-                # Priority: 1) original languages (*-orig), 2) major languages, 3) first available
-                available_langs = list(available_subs.keys())
-                
-                # First, try to find original language subtitles (ending with -orig)
-                orig_langs = [lang for lang in available_langs if lang.endswith('-orig')]
-                if orig_langs:
-                    preferred_lang = orig_langs[0]
-                    print(f"🎯 Auto-selected language: {preferred_lang} (original)")
-                else:
-                    # If no original found, prioritize major languages
-                    preferred_lang = None
-                    for major in MAJOR_LANGUAGES:
-                        if major in available_langs:
-                            preferred_lang = major
-                            break
-                    
-                    # If no major language found, use first available
-                    if preferred_lang is None:
-                        preferred_lang = available_langs[0]
-                    
-                    print(f"🎯 Auto-selected language: {preferred_lang}")
-                
-                if len(available_subs) > 1:
-                    # Group languages by type
-                    orig_langs = []
-                    regular_langs = []
-                    auto_langs = []
-                    
-                    # Track all base languages that have original or standard versions
-                    covered_langs = set()
-                    
-                    for lang in available_subs.keys():
-                        if lang.endswith('-orig'):
-                            base_lang = lang[:-5]  # Remove '-orig' suffix
-                            orig_langs.append(base_lang)
-                            covered_langs.add(base_lang)
-                        elif '-' not in lang:
-                            # Standard language (no hyphens)
-                            regular_langs.append(lang)
-                            covered_langs.add(lang)
-                    
-                    # Only add auto-translated languages if they don't have original or standard versions
-                    for lang in available_subs.keys():
-                        if '-' in lang and not lang.endswith('-orig'):
-                            base_lang = lang.split('-')[0]  # Get part before first '-'
-                            if base_lang not in covered_langs:
-                                auto_langs.append(base_lang)
-                                covered_langs.add(base_lang)
-                    
-                    # Sort each group alphabetically and remove duplicates
-                    orig_langs = sorted(set(orig_langs))
-                    regular_langs = sorted(set(regular_langs))
-                    auto_langs = sorted(set(auto_langs))
-                    
-                    # Display grouped languages
-                    print("Available languages:")
-                    if orig_langs:
-                        print(f"  Original: {', '.join(orig_langs)}")
-                    if regular_langs:
-                        print(f"  Standard: {', '.join(regular_langs)}")
-                    if auto_langs:
-                        print(f"  Auto-translated: {', '.join(auto_langs)}")
-                    print("Use --language parameter to select a specific language.")
-                
-        except Exception as e:
-            print(f"Error checking available subtitles: {e}")
-            sys.exit(1)
-    
-    # Download the subtitles
-    ydl_opts = {
-        'writesubtitles': True,
-        'writeautomaticsub': True,
-        'subtitleslangs': [preferred_lang],
-        'subtitlesformat': 'srt',
-        'skip_download': True,  # Don't download video, only subtitles
-        'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
-    }
-    
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            # Download subtitles
-            ydl.download([youtube_url])
-            
-            # Find the downloaded subtitle file
-            subtitle_files = list(Path(output_dir).glob('*.srt'))
-            if not subtitle_files:
-                raise FileNotFoundError("No subtitle files were downloaded")
-            
-            # Return the downloaded file
-            subtitle_file = str(subtitle_files[0])
-            print(f"✅ Downloaded subtitles")
-            
-            return subtitle_file
-            
-        except Exception as e:
-            print(f"Error downloading subtitles: {e}")
-            sys.exit(1)
-
-def read_subtitle_file(file_path: str) -> str:
-    """
-    Read subtitle file content.
-    
-    Args:
-        file_path: Path to the subtitle file
-    
-    Returns:
-        Content of the subtitle file
-    """
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except Exception as e:
-        print(f"Error reading subtitle file: {e}")
-        sys.exit(1)
+from core import YouTubeProcessor, ProcessingOptions, DEFAULT_MODEL, AVAILABLE_MODELS
 
 def ask_user_choice(question: str) -> bool:
     """
@@ -258,41 +48,24 @@ def ask_user_choice(question: str) -> bool:
         else:
             print("Please answer 'yes' or 'no'")
 
-def send_to_gemini(subtitle_content: str, api_key: str, model_name: str = None) -> str:
-    """
-    Send subtitle content to Gemini AI to generate chapter timecodes.
-    
-    Args:
-        subtitle_content: Content of the subtitle file
-        api_key: Gemini API key
-        model_name: Name of the Gemini model to use
-    
-    Returns:
-        AI-generated chapter timecodes with titles
-    """
+def show_available_languages(processor: YouTubeProcessor, url: str):
+    """Show available languages for the video."""
     try:
-        # Configure Gemini
-        genai.configure(api_key=api_key)
+        langs = processor.get_available_languages(url)
         
-        # Use default model if none specified
-        if model_name is None:
-            model_name = DEFAULT_MODEL
+        if not langs:
+            print("❌ No subtitles available for this video.")
+            return
         
-        # Use specified Gemini model
-        model = genai.GenerativeModel(model_name)
+        print("Available languages:")
+        for category, languages in langs.items():
+            if languages:
+                print(f"  {category.title()}: {', '.join(languages)}")
         
-        # Language-agnostic prompt - Gemini will detect language automatically
-        # Combine prompt with subtitle content
-        full_prompt = f"{GEMINI_PROMPT}\n\nSubtitles:\n{subtitle_content}"
-        
-        # Generate response
-        response = model.generate_content(full_prompt)
-        
-        return response.text
+        print("Use --language parameter to select a specific language.")
         
     except Exception as e:
-        print(f"Error communicating with Gemini: {e}")
-        sys.exit(1)
+        print(f"Error checking languages: {e}")
 
 def main():
     """Main function to generate chapter timecodes from YouTube subtitles."""
@@ -309,14 +82,9 @@ def main():
     parser.add_argument('--model', default=DEFAULT_MODEL, 
                        choices=AVAILABLE_MODELS,
                        help=f'Gemini model to use (default: {DEFAULT_MODEL})')
+    parser.add_argument('--check-languages', action='store_true', help='Check available languages and exit')
     
     args = parser.parse_args()
-    
-    # Get API key from argument or environment variable
-    api_key = args.api_key or os.getenv('GEMINI_API_KEY')
-    if not api_key:
-        print("Error: Please provide Gemini API key via --api-key argument or GEMINI_API_KEY environment variable")
-        sys.exit(1)
     
     # Clean URL from shell escaping
     clean_url = args.youtube_url.replace('\\?', '?').replace('\\=', '=').replace('\\&', '&')
@@ -325,101 +93,116 @@ def main():
     
     print(f"Processing YouTube URL: {clean_url}")
     
-    # Download subtitles
-    print("Downloading subtitles...")
-    subtitle_file = download_subtitles(clean_url, args.language, args.output_dir)
-    print(f"Subtitles downloaded to: {subtitle_file}")
+    # Create processor
+    processor = YouTubeProcessor()
     
-    # Read subtitle content
-    print("Reading subtitle content...")
-    subtitle_content = read_subtitle_file(subtitle_file)
+    # Check languages only if requested
+    if args.check_languages:
+        show_available_languages(processor, clean_url)
+        return
     
-    # Show subtitle content if requested
-    if args.show_subtitles:
-        print("\n" + "="*50)
-        print("SUBTITLE CONTENT:")
-        print("="*50)
-        print(subtitle_content)
-        print("="*50)
-        print()
+    # Get API key from argument or environment variable
+    api_key = args.api_key or os.getenv('GEMINI_API_KEY')
+    if not api_key:
+        print("Error: Please provide Gemini API key via --api-key argument or GEMINI_API_KEY environment variable")
+        sys.exit(1)
     
-    # Interactive or quiet mode
-    if args.quiet:
-        # Quiet mode: don't save file, auto-send to Gemini
-        keep_file = False
-        send_to_ai = True
-        print("🤫 Quiet mode: automatically sending to Gemini...")
-    else:
-        # Interactive mode: show first 10 lines, then ask user about saving
+    # Create processing options
+    options = ProcessingOptions(
+        language=args.language,
+        api_key=api_key,
+        model=args.model,
+        keep_files=args.keep_files,
+        output_dir=args.output_dir,
+        show_subtitles=args.show_subtitles,
+        quiet=args.quiet
+    )
+    
+    try:
+        # Process video
+        print("Processing video...")
+        subtitle_info, gemini_response = processor.process_video(clean_url, options)
         
-        # Show first 10 lines of the subtitle content
-        print("\n📄 First 10 lines of subtitles:")
-        print("-" * 40)
-        lines = subtitle_content.split('\n')
-        for i, line in enumerate(lines[:10], 1):
-            print(f"{i:2d}: {line}")
-        if len(lines) > 10:
-            print(f"... ({len(lines) - 10} more lines)")
-        print("-" * 40)
+        # Show subtitle content if requested
+        if args.show_subtitles:
+            print("\n" + "="*50)
+            print("SUBTITLE CONTENT:")
+            print("="*50)
+            print(subtitle_info.content)
+            print("="*50)
+            print()
         
-        keep_file = ask_user_choice("💾 Save subtitle file?")
-        
-        # Save file immediately if requested
-        if keep_file:
-            # Move file to current directory with a nice name and .txt extension
-            safe_filename = re.sub(r'[^\w\s-]', '', os.path.basename(subtitle_file)).strip()
-            safe_filename = re.sub(r'[-\s]+', '-', safe_filename)
-            new_path = f"subtitles-{safe_filename}.txt"
+        # Interactive or quiet mode
+        if args.quiet:
+            # Quiet mode: don't save file, auto-send to Gemini
+            keep_file = False
+            send_to_ai = True
+            print("🤫 Quiet mode: automatically processed with Gemini...")
+        else:
+            # Interactive mode: show first 10 lines, then ask user about saving
             
-            shutil.copy2(subtitle_file, new_path)
-            print(f"✅ File saved as: {new_path}")
-        
-        # Now ask about sending to Gemini
-        send_to_ai = ask_user_choice("🤖 Send subtitles to Gemini for processing?")
-    
-    if send_to_ai:
-        print(f"📤 Sending subtitles to {args.model}...")
-        response = send_to_gemini(subtitle_content, api_key, args.model)
-        
-        # Output response
-        print("\n" + "="*50)
-        print("GEMINI RESPONSE:")
-        print("="*50)
-        print(response)
-        
-        # In interactive mode, offer to save the response
-        if not args.quiet:
-            print("\n📄 First 10 lines of Gemini response:")
+            # Show first 10 lines of the subtitle content
+            print("\n📄 First 10 lines of subtitles:")
             print("-" * 40)
-            response_lines = response.split('\n')
-            for i, line in enumerate(response_lines[:10], 1):
+            lines = subtitle_info.content.split('\n')
+            for i, line in enumerate(lines[:10], 1):
                 print(f"{i:2d}: {line}")
-            if len(response_lines) > 10:
-                print(f"... ({len(response_lines) - 10} more lines)")
+            if len(lines) > 10:
+                print(f"... ({len(lines) - 10} more lines)")
             print("-" * 40)
             
-            save_response = ask_user_choice("💾 Save Gemini response?")
-            if save_response:
-                # Create a filename based on the original video
-                safe_filename = re.sub(r'[^\w\s-]', '', os.path.basename(subtitle_file)).strip()
+            keep_file = ask_user_choice("💾 Save subtitle file?")
+            
+            # Save file immediately if requested
+            if keep_file:
+                # Save with a nice name and .txt extension
+                safe_filename = re.sub(r'[^\w\s-]', '', os.path.basename(subtitle_info.file_path)).strip()
                 safe_filename = re.sub(r'[-\s]+', '-', safe_filename)
-                response_path = f"chapters-{safe_filename}.txt"
+                new_path = f"subtitles-{safe_filename}.txt"
                 
-                with open(response_path, 'w', encoding='utf-8') as f:
-                    f.write(response)
-                print(f"✅ Gemini response saved as: {response_path}")
-    else:
-        print("⏭️  Skipping Gemini processing.")
-    
-    # Clean up temporary files unless user chose to keep them or specified output dir
-    if not keep_file and not args.keep_files and args.output_dir is None:
-        try:
-            os.remove(subtitle_file)
-            os.rmdir(os.path.dirname(subtitle_file))
-        except Exception as e:
-            print(f"Warning: Could not clean up temporary files: {e}")
-    
-    print("\n✅ Done!")
+                shutil.copy2(subtitle_info.file_path, new_path)
+                print(f"✅ File saved as: {new_path}")
+        
+        # Show Gemini response
+        if gemini_response:
+            print("\n" + "="*50)
+            print("GEMINI RESPONSE:")
+            print("="*50)
+            print(gemini_response)
+            
+            # In interactive mode, offer to save the response
+            if not args.quiet:
+                print("\n📄 First 10 lines of Gemini response:")
+                print("-" * 40)
+                response_lines = gemini_response.split('\n')
+                for i, line in enumerate(response_lines[:10], 1):
+                    print(f"{i:2d}: {line}")
+                if len(response_lines) > 10:
+                    print(f"... ({len(response_lines) - 10} more lines)")
+                print("-" * 40)
+                
+                save_response = ask_user_choice("💾 Save Gemini response?")
+                if save_response:
+                    # Create a filename based on the original video
+                    safe_filename = re.sub(r'[^\w\s-]', '', os.path.basename(subtitle_info.file_path)).strip()
+                    safe_filename = re.sub(r'[-\s]+', '-', safe_filename)
+                    response_path = f"chapters-{safe_filename}.txt"
+                    
+                    with open(response_path, 'w', encoding='utf-8') as f:
+                        f.write(gemini_response)
+                    print(f"✅ Gemini response saved as: {response_path}")
+        else:
+            print("⏭️  No Gemini processing performed.")
+        
+        print("\n✅ Done!")
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        sys.exit(1)
+    finally:
+        # Clean up temporary files
+        if not args.keep_files:
+            processor.cleanup()
 
 if __name__ == "__main__":
     main() 
