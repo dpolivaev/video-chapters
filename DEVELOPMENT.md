@@ -187,18 +187,18 @@ python build_app.py --no-clean
 #### macOS Code Signing and Notarization
 
 ```bash
-# Build with code signing
-python build_app.py --sign --signing-identity "Developer ID Application: Your Name (TEAM_ID)"
+# Build with code signing (using partial name)
+python build_app.py --sign --signing-identity "Your Name"
 
 # Build with code signing and DMG creation
-python build_app.py --sign --signing-identity "Developer ID Application: Your Name (TEAM_ID)" --create-dmg
+python build_app.py --sign --signing-identity "Your Name" --create-dmg
 
 # Build with full notarization
 python build_app.py \
   --sign \
-  --signing-identity "Developer ID Application: Your Name (TEAM_ID)" \
+  --signing-identity "Your Name" \
   --create-dmg \
-  --notary-profile notary-dimitry
+  --notary-profile your-notary-profile
 ```
 
 #### Windows Code Signing
@@ -294,13 +294,13 @@ security find-identity -v -p codesigning
 
 ```bash
 # Store credentials in keychain
-xcrun notarytool store-credentials notary-dimitry \
+xcrun notarytool store-credentials your-notary-profile \
   --apple-id "your-email@example.com" \
   --team-id "YOUR_TEAM_ID" \
   --password "app-specific-password"
 
 # Or using API key:
-xcrun notarytool store-credentials notary-dimitry \
+xcrun notarytool store-credentials your-notary-profile \
   --key "path/to/AuthKey_KEYID.p8" \
   --key-id "KEY_ID" \
   --issuer "ISSUER_ID"
@@ -313,7 +313,7 @@ xcrun notarytool store-credentials notary-dimitry \
 codesign --sign "Developer ID Application: Your Name (TEAM_ID)" --verify --verbose test_file
 
 # Test notarization credentials
-xcrun notarytool history --keychain-profile notary-dimitry
+xcrun notarytool history --keychain-profile your-notary-profile
 ```
 
 ### Windows Code Signing Setup
@@ -370,7 +370,7 @@ python build_app.py --help
 
 **Signing Options:**
 - `--sign`: Enable code signing
-- `--signing-identity`: macOS code signing identity
+- `--signing-identity`: macOS code signing identity (can be partial name like "Your Name" or full identity)
 - `--notary-profile`: macOS notarization keychain profile
 - `--create-dmg`: Create DMG package (macOS)
 - `--cert-path`: Windows certificate file path
@@ -383,9 +383,9 @@ python build_app.py --help
 # macOS: Full signed and notarized build
 python build_app.py \
   --sign \
-  --signing-identity "Developer ID Application: Your Name (TEAM_ID)" \
+  --signing-identity "Your Name" \
   --create-dmg \
-  --notary-profile notary-dimitry
+  --notary-profile your-notary-profile
 
 # Windows: Signed build
 python build_app.py \
@@ -397,7 +397,7 @@ python build_app.py \
 python build_app.py \
   --gui-only \
   --sign \
-  --signing-identity "Developer ID Application: Your Name (TEAM_ID)" \
+  --signing-identity "Your Name" \
   --cert-path "certificates/code-signing.p12"
 ```
 
@@ -585,10 +585,10 @@ xcode-select --install
 **Solution**:
 ```bash
 # Verify keychain profile
-xcrun notarytool history --keychain-profile notary-dimitry
+xcrun notarytool history --keychain-profile your-notary-profile
 
 # If fails, recreate profile:
-xcrun notarytool store-credentials notary-dimitry \
+xcrun notarytool store-credentials your-notary-profile \
   --apple-id "your-email@example.com" \
   --team-id "YOUR_TEAM_ID" \
   --password "app-specific-password"
@@ -691,9 +691,9 @@ python build_app.py
 # macOS:
 python build_app.py \
   --sign \
-  --signing-identity "Developer ID Application: Your Name (TEAM_ID)" \
+  --signing-identity "Your Name" \
   --create-dmg \
-  --notary-profile notary-dimitry
+  --notary-profile your-notary-profile
 
 # Windows:
 python build_app.py \

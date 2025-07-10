@@ -21,16 +21,58 @@ def run_command(cmd, check=True):
         print(f"Output: {result.stdout}")
     return True
 
+def find_signing_identity(name_or_identity):
+    """Find the full signing identity from a partial name or return the full identity if already provided."""
+    import subprocess
+    
+    # If it already looks like a full identity, use it as-is
+    if name_or_identity.startswith("Developer ID Application:"):
+        return name_or_identity
+    
+    # Search for matching identities
+    try:
+        result = subprocess.run(
+            ["security", "find-identity", "-v", "-p", "codesigning"],
+            capture_output=True, text=True, check=True
+        )
+        
+        # Parse the output to find matching identity
+        for line in result.stdout.split('\n'):
+            if name_or_identity in line and "Developer ID Application:" in line:
+                # Extract the identity string (everything in quotes)
+                import re
+                match = re.search(r'"([^"]*)"', line)
+                if match:
+                    full_identity = match.group(1)
+                    print(f"🔍 Found signing identity: {full_identity}")
+                    return full_identity
+        
+        print(f"❌ No signing identity found containing '{name_or_identity}'")
+        print("Available identities:")
+        for line in result.stdout.split('\n'):
+            if "Developer ID Application:" in line:
+                print(f"  {line.strip()}")
+        return None
+        
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Error searching for signing identity: {e}")
+        return None
+
 def sign_macos_app(app_path, signing_identity=None):
     """Sign macOS application."""
     if not signing_identity:
         print("⚠️  No signing identity provided, skipping code signing")
         return True
+    
+    # Find the full identity if a partial name was provided
+    full_identity = find_signing_identity(signing_identity)
+    if not full_identity:
+        return False
         
     print(f"🔐 Signing macOS app: {app_path}")
     
     # Sign the app bundle
-    cmd = f'codesign --force --verify --verbose --sign "{signing_identity}" "{app_path}"'
+    cmd = f'codesign --force --verify --verbose --sign "{full_identity}" "{app_path}"'
     if not run_command(cmd):
         print("❌ Failed to sign macOS app")
         return False
@@ -249,7 +291,7 @@ def main():
     parser.add_argument("--sign", action="store_true", help="Enable code signing")
     
     # macOS signing options
-    parser.add_argument("--signing-identity", help="macOS code signing identity")
+    parser.add_argument("--signing-identity", help="macOS code signing identity (can be partial name like 'Your Name' or full identity)")
     parser.add_argument("--notary-profile", help="macOS notarization keychain profile")
     parser.add_argument("--create-dmg", action="store_true", help="Create DMG package (macOS)")
     
