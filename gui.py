@@ -64,6 +64,10 @@ class ChapterTimecodeGUI:
         # Setup variables
         self.setup_variables()
         
+        # macOS-specific setup
+        if sys.platform == "darwin":
+            self.setup_macos_integration()
+        
         # Create menu bar
         self.create_menu_bar()
         
@@ -187,12 +191,24 @@ class ChapterTimecodeGUI:
         self.processing_thread = None
         self.available_languages = {}
         
+    def setup_macos_integration(self):
+        """Setup macOS-specific menu integration."""
+        try:
+            # Register About command for macOS application menu
+            self.root.createcommand('tkAboutDialog', self.show_about)
+            
+            # Set up the application to use the system menu bar
+            self.root.tk.call('::tk::unsupported::MacWindowStyle', 'style', self.root._w, 'document')
+        except Exception as e:
+            # If macOS integration fails, just continue without it
+            print(f"macOS integration failed: {e}")
+        
     def create_menu_bar(self):
         """Create the main menu bar."""
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
 
-        # Help menu
+        # Create Help menu (on macOS, About will also appear in app menu via createcommand)
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Help", menu=help_menu)
         help_menu.add_command(label="About", command=self.show_about)
