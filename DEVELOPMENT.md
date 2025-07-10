@@ -182,6 +182,39 @@ python build_app.py --cli-only
 python build_app.py --no-clean
 ```
 
+### Production Build with Code Signing
+
+#### macOS Code Signing and Notarization
+
+```bash
+# Build with code signing
+python build_app.py --sign --signing-identity "Developer ID Application: Your Name (TEAM_ID)"
+
+# Build with code signing and DMG creation
+python build_app.py --sign --signing-identity "Developer ID Application: Your Name (TEAM_ID)" --create-dmg
+
+# Build with full notarization
+python build_app.py \
+  --sign \
+  --signing-identity "Developer ID Application: Your Name (TEAM_ID)" \
+  --create-dmg \
+  --notary-profile notary-dimitry
+```
+
+#### Windows Code Signing
+
+```bash
+# Build with code signing
+python build_app.py --sign --cert-path "path/to/certificate.p12" --cert-password "your_password"
+
+# Build with custom timestamp server
+python build_app.py \
+  --sign \
+  --cert-path "path/to/certificate.p12" \
+  --cert-password "your_password" \
+  --timestamp-url "http://timestamp.digicert.com"
+```
+
 ### Manual PyInstaller Build
 
 #### GUI Application
@@ -212,8 +245,160 @@ After building, executables will be in the `dist/` directory:
 dist/
 ├── YouTube Chapters      # GUI app (macOS/Linux)
 ├── YouTube Chapters.exe  # GUI app (Windows)
+├── YouTube Chapters.dmg  # Signed DMG (macOS, if --create-dmg used)
 ├── youtube-chapters-cli  # CLI app (macOS/Linux)
 └── youtube-chapters-cli.exe  # CLI app (Windows)
+```
+
+## Code Signing Setup
+
+Code signing is essential for distributing applications to end users, as it provides security verification and prevents security warnings.
+
+### macOS Code Signing Setup
+
+#### Prerequisites
+
+1. **Apple Developer Account** (required for distribution)
+2. **Xcode Command Line Tools**
+3. **Developer ID Certificate** in Keychain
+
+#### 1. Install Xcode Command Line Tools
+
+```bash
+xcode-select --install
+```
+
+#### 2. Get Developer ID Certificate
+
+1. Go to [Apple Developer Portal](https://developer.apple.com/account/resources/certificates)
+2. Create a "Developer ID Application" certificate
+3. Download and install in Keychain Access
+4. Find your signing identity:
+
+```bash
+# List available signing identities
+security find-identity -v -p codesigning
+
+# Example output:
+# 1) 1234567890ABCDEF "Developer ID Application: Your Name (TEAM_ID)"
+```
+
+#### 3. Setup Notarization (Optional but Recommended)
+
+1. Create an App Store Connect API key:
+   - Go to [App Store Connect](https://appstoreconnect.apple.com/access/api)
+   - Create a new API key with "Developer" role
+   - Download the `.p8` file
+
+2. Setup keychain profile:
+
+```bash
+# Store credentials in keychain
+xcrun notarytool store-credentials notary-dimitry \
+  --apple-id "your-email@example.com" \
+  --team-id "YOUR_TEAM_ID" \
+  --password "app-specific-password"
+
+# Or using API key:
+xcrun notarytool store-credentials notary-dimitry \
+  --key "path/to/AuthKey_KEYID.p8" \
+  --key-id "KEY_ID" \
+  --issuer "ISSUER_ID"
+```
+
+#### 4. Verify Setup
+
+```bash
+# Test signing
+codesign --sign "Developer ID Application: Your Name (TEAM_ID)" --verify --verbose test_file
+
+# Test notarization credentials
+xcrun notarytool history --keychain-profile notary-dimitry
+```
+
+### Windows Code Signing Setup
+
+#### Prerequisites
+
+1. **Code Signing Certificate** (from trusted CA like DigiCert, Sectigo, etc.)
+2. **Windows SDK** (for signtool.exe)
+
+#### 1. Install Windows SDK
+
+Download and install [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/) which includes `signtool.exe`.
+
+#### 2. Get Code Signing Certificate
+
+**Option A: File-based Certificate (.p12/.pfx)**
+- Purchase from a trusted CA (DigiCert, Sectigo, etc.)
+- Download as `.p12` or `.pfx` file
+- Keep the password secure
+
+**Option B: Hardware Security Module (HSM)**
+- For higher security (required for EV certificates)
+- Certificate stored on USB token or cloud HSM
+
+#### 3. Verify signtool.exe
+
+```bash
+# Check if signtool is available
+signtool.exe /?
+
+# If not found, add Windows SDK to PATH:
+# C:\Program Files (x86)\Windows Kits\10\bin\10.0.XXXXX.X\x64\
+```
+
+#### 4. Test Signing
+
+```bash
+# Test with your certificate
+signtool.exe sign /f "path\to\certificate.p12" /p "password" /t "http://timestamp.sectigo.com" /v "test_file.exe"
+```
+
+### Build Script Options
+
+#### Command Line Arguments
+
+```bash
+python build_app.py --help
+```
+
+**Build Options:**
+- `--gui-only`: Build GUI application only
+- `--cli-only`: Build CLI application only  
+- `--no-clean`: Don't clean up build files
+
+**Signing Options:**
+- `--sign`: Enable code signing
+- `--signing-identity`: macOS code signing identity
+- `--notary-profile`: macOS notarization keychain profile
+- `--create-dmg`: Create DMG package (macOS)
+- `--cert-path`: Windows certificate file path
+- `--cert-password`: Windows certificate password
+- `--timestamp-url`: Timestamp server URL
+
+#### Example Production Builds
+
+```bash
+# macOS: Full signed and notarized build
+python build_app.py \
+  --sign \
+  --signing-identity "Developer ID Application: Your Name (TEAM_ID)" \
+  --create-dmg \
+  --notary-profile notary-dimitry
+
+# Windows: Signed build
+python build_app.py \
+  --sign \
+  --cert-path "certificates/code-signing.p12" \
+  --cert-password "your_secure_password"
+
+# Cross-platform: GUI only with signing
+python build_app.py \
+  --gui-only \
+  --sign \
+  --signing-identity "Developer ID Application: Your Name (TEAM_ID)" \
+  --cert-path "certificates/code-signing.p12"
 ```
 
 ## Development Workflow
@@ -366,6 +551,79 @@ which python  # Should show venv path
 pip install -e .
 ```
 
+#### 5. Code Signing Issues (macOS)
+
+**Error**: `codesign: command not found`
+
+**Solution**:
+```bash
+# Install Xcode Command Line Tools
+xcode-select --install
+```
+
+**Error**: `no identity found`
+
+**Solution**:
+```bash
+# List available identities
+security find-identity -v -p codesigning
+
+# If empty, create and install Developer ID certificate from Apple Developer Portal
+```
+
+**Error**: `notarytool: command not found`
+
+**Solution**:
+```bash
+# Update Xcode Command Line Tools
+sudo xcode-select --reset
+xcode-select --install
+```
+
+**Error**: Notarization fails with authentication error
+
+**Solution**:
+```bash
+# Verify keychain profile
+xcrun notarytool history --keychain-profile notary-dimitry
+
+# If fails, recreate profile:
+xcrun notarytool store-credentials notary-dimitry \
+  --apple-id "your-email@example.com" \
+  --team-id "YOUR_TEAM_ID" \
+  --password "app-specific-password"
+```
+
+#### 6. Code Signing Issues (Windows)
+
+**Error**: `signtool.exe: command not found`
+
+**Solution**:
+```bash
+# Install Windows SDK and add to PATH
+# Or use full path:
+"C:\Program Files (x86)\Windows Kits\10\bin\10.0.XXXXX.X\x64\signtool.exe"
+```
+
+**Error**: Certificate password prompt
+
+**Solution**:
+```bash
+# Use environment variable for password (more secure)
+set CERT_PASSWORD=your_password
+python build_app.py --sign --cert-path "cert.p12" --cert-password "%CERT_PASSWORD%"
+```
+
+**Error**: `The specified timestamp server either could not be reached`
+
+**Solution**:
+```bash
+# Try different timestamp servers:
+python build_app.py --sign --timestamp-url "http://timestamp.digicert.com"
+python build_app.py --sign --timestamp-url "http://timestamp.sectigo.com"
+python build_app.py --sign --timestamp-url "http://timestamp.globalsign.com/tsa/r6advanced1"
+```
+
 ### Debug Mode
 
 #### Enable Verbose Logging
@@ -425,9 +683,23 @@ pip install --upgrade -r requirements.txt -r requirements-dev.txt
 # Update CHANGELOG.md if you have one
 # Test everything works
 
-# Build and test executables
+# Build and test executables (unsigned for testing)
 python build_app.py
 # Test the built executables
+
+# Build production signed executables
+# macOS:
+python build_app.py \
+  --sign \
+  --signing-identity "Developer ID Application: Your Name (TEAM_ID)" \
+  --create-dmg \
+  --notary-profile notary-dimitry
+
+# Windows:
+python build_app.py \
+  --sign \
+  --cert-path "path/to/certificate.p12" \
+  --cert-password "your_password"
 ```
 
 ### 2. Create Release
