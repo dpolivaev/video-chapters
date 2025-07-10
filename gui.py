@@ -869,7 +869,14 @@ class ChapterTimecodeGUI:
         
         # Try to read license file
         try:
-            license_path = Path("LICENSE")
+            # Handle both development and packaged environments
+            if hasattr(sys, '_MEIPASS'):
+                # PyInstaller packaged environment
+                license_path = Path(sys._MEIPASS) / "LICENSE"
+            else:
+                # Development environment
+                license_path = Path("LICENSE")
+            
             if license_path.exists():
                 with open(license_path, 'r', encoding='utf-8') as f:
                     license_content = f.read()
