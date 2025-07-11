@@ -51,6 +51,9 @@ class ChapterTimecodeGUI:
         self.root = tk.Tk()
         self.root.title("Chapter Timecodes - Video Subtitle to Chapter Converter")
         
+        # Set window icon
+        self.setup_icon()
+        
         # Configure for better DPI handling
         self.setup_dpi_scaling()
         
@@ -79,6 +82,75 @@ class ChapterTimecodeGUI:
         
         # Load saved settings
         self.load_settings()
+        
+    def setup_icon(self):
+        """Set up the application icon for different platforms."""
+        try:
+            # Handle both development and packaged environments
+            if hasattr(sys, '_MEIPASS'):
+                # PyInstaller packaged environment
+                base_path = Path(sys._MEIPASS)
+            else:
+                # Development environment
+                base_path = Path(".")
+            
+            # Platform-specific icon handling
+            if sys.platform == "win32":
+                # Windows - use .ico file
+                icon_path = base_path / "icon.ico"
+                if icon_path.exists():
+                    self.root.iconbitmap(str(icon_path))
+                else:
+                    # Try alternative locations
+                    alt_paths = [
+                        base_path / "assets" / "icon.ico",
+                        base_path / "icons" / "icon.ico",
+                        Path("icon.ico")
+                    ]
+                    for alt_path in alt_paths:
+                        if alt_path.exists():
+                            self.root.iconbitmap(str(alt_path))
+                            break
+                            
+            elif sys.platform == "darwin":
+                # macOS - use .icns file via iconphoto (iconbitmap doesn't work well on macOS)
+                icon_path = base_path / "icon.icns"
+                if icon_path.exists():
+                    # For macOS, we need to convert to PhotoImage
+                    # Note: tkinter doesn't directly support .icns, so we'll use .png as fallback
+                    png_path = base_path / "icon.png"
+                    if png_path.exists():
+                        icon_image = tk.PhotoImage(file=str(png_path))
+                        self.root.iconphoto(True, icon_image)
+                else:
+                    # Try PNG fallback
+                    png_path = base_path / "icon.png"
+                    if png_path.exists():
+                        icon_image = tk.PhotoImage(file=str(png_path))
+                        self.root.iconphoto(True, icon_image)
+                        
+            else:
+                # Linux and other platforms - use .png file
+                icon_path = base_path / "icon.png"
+                if icon_path.exists():
+                    icon_image = tk.PhotoImage(file=str(icon_path))
+                    self.root.iconphoto(True, icon_image)
+                else:
+                    # Try alternative locations
+                    alt_paths = [
+                        base_path / "assets" / "icon.png",
+                        base_path / "icons" / "icon.png",
+                        Path("icon.png")
+                    ]
+                    for alt_path in alt_paths:
+                        if alt_path.exists():
+                            icon_image = tk.PhotoImage(file=str(alt_path))
+                            self.root.iconphoto(True, icon_image)
+                            break
+                            
+        except Exception as e:
+            # If icon loading fails, just continue without icon
+            print(f"Warning: Could not load application icon: {e}")
         
     def setup_dpi_scaling(self):
         """Configure DPI scaling for better appearance on high-DPI displays."""

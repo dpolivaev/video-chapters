@@ -160,19 +160,150 @@ def sign_windows_exe(exe_path):
     print("✅ Windows executable signed successfully")
     return True
 
+def generate_platform_icons():
+    """Generate platform-specific icons from high-resolution source."""
+    print("🎨 Generating platform-specific icons...")
+    
+    # Ensure build directory exists
+    build_dir = Path("build")
+    build_dir.mkdir(exist_ok=True)
+    
+    # Check if we have the high-resolution source
+    highres_png = Path("icon_highres.png")
+    if not highres_png.exists():
+        print("⚠️  icon_highres.png not found - creating from icon.png")
+        if not Path("icon.png").exists():
+            print("❌ No icon source files found")
+            return False
+        
+        # If we only have the low-res PNG, use it as source
+        # This is a fallback for systems without the high-res version
+        highres_png = Path("icon.png")
+    
+    try:
+        # Import PIL for icon generation
+        from PIL import Image
+        
+        # Load the source icon
+        base_icon = Image.open(highres_png)
+        base_size = base_icon.size[0]
+        print(f"📊 Using source icon: {highres_png} ({base_size}x{base_size})")
+        
+        if sys.platform == "darwin":
+            # macOS - create .icns using iconutil
+            print("🍎 Creating macOS .icns file...")
+            
+            # Create iconset directory in build folder
+            iconset_dir = build_dir / "icon.iconset"
+            iconset_dir.mkdir(exist_ok=True)
+            
+            # Define required sizes for macOS
+            sizes = [
+                (16, 'icon_16x16.png'),
+                (32, 'icon_16x16@2x.png'),
+                (32, 'icon_32x32.png'),
+                (64, 'icon_32x32@2x.png'),
+                (128, 'icon_128x128.png'),
+                (256, 'icon_128x128@2x.png'),
+                (256, 'icon_256x256.png'),
+                (512, 'icon_256x256@2x.png'),
+                (512, 'icon_512x512.png'),
+                (1024, 'icon_512x512@2x.png') if base_size >= 1024 else None
+            ]
+            
+            # Filter out None entries
+            sizes = [s for s in sizes if s is not None]
+            
+            # Create all required sizes in build directory
+            for size, filename in sizes:
+                if size <= base_size:
+                    resized = base_icon.resize((size, size), Image.LANCZOS)
+                    resized.save(iconset_dir / filename, 'PNG', optimize=True)
+                else:
+                    print(f"⚠️  Skipping {filename} - source too small ({base_size}x{base_size})")
+            
+            # Convert to .icns using iconutil (output to build directory)
+            icns_path = build_dir / "icon.icns"
+            if shutil.which("iconutil"):
+                if run_command(f"iconutil -c icns '{iconset_dir}' -o '{icns_path}'"):
+                    print(f"✅ Created {icns_path}")
+                    # Clean up iconset directory
+                    shutil.rmtree(iconset_dir)
+                else:
+                    print("❌ Failed to create .icns file")
+                    return False
+            else:
+                print("⚠️  iconutil not available - keeping PNG fallback")
+                
+        elif sys.platform == "win32":
+            # Windows - create .ico file
+            print("🪟 Creating Windows .ico file...")
+            
+            # Create multiple sizes for ICO
+            ico_sizes = [16, 32, 48, 64, 128, 256]
+            icons = []
+            
+            for size in ico_sizes:
+                if size <= base_size:
+                    icon = base_icon.resize((size, size), Image.LANCZOS)
+                    icons.append(icon)
+            
+            if icons:
+                # Save ICO file to build directory
+                ico_path = build_dir / "icon.ico"
+                icons[0].save(ico_path, format='ICO', 
+                             sizes=[(icon.size[0], icon.size[1]) for icon in icons])
+                print(f"✅ Created {ico_path} with {len(icons)} sizes")
+            else:
+                print("❌ No suitable sizes for ICO creation")
+                return False
+                
+        else:
+            # Linux and other platforms - use PNG
+            print("🐧 Using PNG icon for Linux/other platforms...")
+            
+        # Always create/update the standard PNG icon in build directory
+        png_path = build_dir / "icon.png"
+        if base_size > 64:
+            standard_png = base_icon.resize((64, 64), Image.LANCZOS)
+            standard_png.save(png_path, 'PNG', optimize=True)
+            print(f"✅ Created/updated {png_path} (64x64)")
+        else:
+            # Copy existing icon if it's already the right size
+            base_icon.save(png_path, 'PNG', optimize=True)
+            print(f"✅ Copied {png_path} (64x64)")
+        
+        return True
+        
+    except ImportError:
+        print("❌ PIL/Pillow not installed - cannot generate icons")
+        print("   Install with: pip install Pillow")
+        return False
+    except Exception as e:
+        print(f"❌ Error generating icons: {e}")
+        return False
+
 def build_gui_app(args):
     """Build the GUI application using PyInstaller's built-in signing."""
     print("🚀 Building GUI application...")
     
+    # Generate platform-specific icons first
+    if not generate_platform_icons():
+        print("⚠️  Icon generation failed - continuing without icons")
+    
     # Determine platform-specific settings
+    build_dir = Path("build")
     if sys.platform == "darwin":  # macOS
-        icon_flag = "--icon=icon.icns" if Path("icon.icns").exists() else ""
+        icon_path = build_dir / "icon.icns"
+        icon_flag = f"--icon={icon_path}" if icon_path.exists() else ""
         app_name = "Chapter Timecodes"
     elif sys.platform == "win32":  # Windows
-        icon_flag = "--icon=icon.ico" if Path("icon.ico").exists() else ""
+        icon_path = build_dir / "icon.ico"
+        icon_flag = f"--icon={icon_path}" if icon_path.exists() else ""
         app_name = "Chapter Timecodes"
     else:  # Linux
-        icon_flag = "--icon=icon.png" if Path("icon.png").exists() else ""
+        icon_path = build_dir / "icon.png"
+        icon_flag = f"--icon={icon_path}" if icon_path.exists() else ""
         app_name = "Chapter Timecodes"
     
     # Build command - use PyInstaller's built-in signing for macOS
