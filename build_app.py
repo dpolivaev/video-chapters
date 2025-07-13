@@ -115,10 +115,13 @@ def create_dmg(app_path, dmg_path):
     temp_dir.mkdir(exist_ok=True)
     
     try:
-        # Copy app to temp directory
+        # Copy app to temp directory using ditto to preserve extended attributes
         app_name = Path(app_path).name
         temp_app_path = temp_dir / app_name
-        shutil.copytree(app_path, temp_app_path)
+        cmd = f'ditto "{app_path}" "{temp_app_path}"'
+        if not run_command(cmd, timeout=120):
+            print("❌ Failed to copy app bundle")
+            return False
         
         # Create symlink to Applications
         applications_link = temp_dir / "Applications"
