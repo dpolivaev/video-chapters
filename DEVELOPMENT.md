@@ -194,7 +194,6 @@ python build_app.py --sign --signing-identity "Your Name" --create-dmg
 python build_app.py \
   --sign \
   --signing-identity "Your Name" \
-  --create-dmg \
   --notary-profile your-notary-profile
 ```
 

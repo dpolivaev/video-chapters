@@ -8,7 +8,9 @@ import sys
 import subprocess
 import shutil
 import argparse
+import platform
 from pathlib import Path
+from config import APP_VERSION
 
 def run_command(cmd, check=True, timeout=300):
     """Run a shell command and return success status."""
@@ -68,42 +70,25 @@ def find_signing_identity(name_or_identity):
         print(f"❌ Error searching for signing identity: {e}")
         return None
 
-def notarize_macos_app(app_path, keychain_profile):
-    """Notarize macOS app bundle using the modern approach."""
-    print(f"🔔 Notarizing macOS app: {app_path}")
+def notarize_macos_dmg(dmg_path, keychain_profile):
+    """Notarize macOS DMG file using the modern approach."""
+    print(f"🔔 Notarizing macOS DMG: {dmg_path}")
     
-    # Create zip file for notarization using ditto
-    zip_path = f"{app_path}.zip"
-    
-    print(f"📦 Creating zip file for notarization...")
-    cmd = f'ditto -c -k --sequesterRsrc --keepParent "{app_path}" "{zip_path}"'
-    if not run_command(cmd, timeout=300):
-        print("❌ Failed to create zip file")
-        return False
-    
-    # Submit for notarization with --wait flag
-    print("🔔 Submitting for notarization...")
-    cmd = f'xcrun notarytool submit "{zip_path}" --keychain-profile {keychain_profile} --wait'
+    # Submit DMG for notarization with --wait flag
+    print("🔔 Submitting DMG for notarization...")
+    cmd = f'xcrun notarytool submit "{dmg_path}" --keychain-profile {keychain_profile} --wait'
     if not run_command(cmd, timeout=1800):  # 30 minutes timeout
         print("❌ Notarization failed")
         return False
     
-    # Staple the notarization to the app bundle
-    print(f"🔖 Stapling notarization to app bundle...")
-    cmd = f'xcrun stapler staple "{app_path}"'
+    # Staple the notarization to the DMG
+    print(f"🔖 Stapling notarization to DMG...")
+    cmd = f'xcrun stapler staple "{dmg_path}"'
     if not run_command(cmd, timeout=60):
         print("❌ Failed to staple notarization")
         return False
     
-    print("✅ Notarization completed successfully!")
-    
-    # Clean up zip file
-    try:
-        Path(zip_path).unlink()
-        print("🧹 Cleaned up zip file")
-    except Exception as e:
-        print(f"⚠️  Could not remove zip file: {e}")
-    
+    print("✅ DMG notarization completed successfully!")
     return True
 
 def create_dmg(app_path, dmg_path):
@@ -355,31 +340,74 @@ def build_gui_app(args):
             return False
         print("✅ Signing verified successfully")
         
-        # Notarize if profile provided
-        if args.notary_profile:
-            if not notarize_macos_app(app_path, args.notary_profile):
-                return False
-        
-        # Create and sign DMG if requested
-        if args.create_dmg:
+        # Create DMG if requested or if notarization is requested
+        if args.create_dmg or args.notary_profile:
             dmg_path = f"dist/{app_name}.dmg"
             
             if not create_dmg(app_path, dmg_path):
                 return False
                 
-            # Sign the DMG file
-            print(f"🔐 Signing DMG file...")
-            cmd = f'codesign --sign "{full_identity}" "{dmg_path}"'
-            if not run_command(cmd, timeout=120):
-                print("❌ Failed to sign DMG")
-                return False
-            print("✅ DMG signed successfully")
+            # Get architecture for DMG name
+            arch = platform.machine()
+            if arch == "x86_64":
+                arch_suffix = "x64"
+            elif arch == "arm64":
+                arch_suffix = "arm64"
+            else:
+                arch_suffix = arch
+            
+            # Rename DMG to versioned name
+            versioned_dmg = f"dist/ChapterTimecodes-v{APP_VERSION}-{arch_suffix}.dmg"
+            Path(dmg_path).rename(versioned_dmg)
+            print(f"✅ Renamed DMG to: {versioned_dmg}")
+                
+            # Sign the DMG file with versioned name if signing is enabled
+            if args.sign:
+                print(f"🔐 Signing DMG file...")
+                cmd = f'codesign --sign "{full_identity}" "{versioned_dmg}"'
+                if not run_command(cmd, timeout=120):
+                    print("❌ Failed to sign DMG")
+                    return False
+                print("✅ DMG signed successfully")
+            
+            # Notarize DMG if profile provided
+            if args.notary_profile:
+                if not notarize_macos_dmg(versioned_dmg, args.notary_profile):
+                    return False
                 
     elif sys.platform == "win32" and args.sign:
         exe_path = f"dist/{app_name}.exe"
         
         if not sign_windows_exe(exe_path):
             return False
+    
+    # Rename final outputs to include version
+    if sys.platform == "win32":
+        original_exe = f"dist/{app_name}.exe"
+        versioned_exe = f"dist/ChapterTimecodes-v{APP_VERSION}.exe"
+        if Path(original_exe).exists():
+            Path(original_exe).rename(versioned_exe)
+            print(f"✅ Renamed to: {versioned_exe}")
+    elif sys.platform == "darwin" and (args.create_dmg or args.notary_profile) and not args.sign:
+        # Handle DMG renaming when not signing
+        original_dmg = f"dist/{app_name}.dmg"
+        if Path(original_dmg).exists():
+            arch = platform.machine()
+            if arch == "x86_64":
+                arch_suffix = "x64"
+            elif arch == "arm64":
+                arch_suffix = "arm64"
+            else:
+                arch_suffix = arch
+            
+            versioned_dmg = f"dist/ChapterTimecodes-v{APP_VERSION}-{arch_suffix}.dmg"
+            Path(original_dmg).rename(versioned_dmg)
+            print(f"✅ Renamed DMG to: {versioned_dmg}")
+            
+            # Notarize DMG if profile provided but no signing
+            if args.notary_profile:
+                if not notarize_macos_dmg(versioned_dmg, args.notary_profile):
+                    return False
     
     return True
 
@@ -426,7 +454,7 @@ def main():
     parser.add_argument("--sign", action="store_true", help="Enable code signing (macOS only)")
     if sys.platform == "darwin":
         parser.add_argument("--signing-identity", help="Code signing identity (macOS only)")
-        parser.add_argument("--notary-profile", help="macOS notarization keychain profile")
+        parser.add_argument("--notary-profile", help="macOS notarization keychain profile (automatically creates DMG)")
         parser.add_argument("--create-dmg", action="store_true", help="Create DMG package (macOS only)")
     
     # Windows signing options (certificate info is configured in codesign/codesign.bat)
