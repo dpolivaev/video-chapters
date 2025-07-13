@@ -280,6 +280,28 @@ class ChapterTimecodeGUI:
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
 
+        # Create Edit menu
+        edit_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Edit", menu=edit_menu)
+        
+        # Platform-specific accelerator text
+        if sys.platform == "darwin":
+            cut_accel = "Cmd+X"
+            copy_accel = "Cmd+C"
+            paste_accel = "Cmd+V"
+            select_all_accel = "Cmd+A"
+        else:
+            cut_accel = "Ctrl+X"
+            copy_accel = "Ctrl+C"
+            paste_accel = "Ctrl+V"
+            select_all_accel = "Ctrl+A"
+        
+        edit_menu.add_command(label="Cut", command=self.menu_cut, accelerator=cut_accel)
+        edit_menu.add_command(label="Copy", command=self.menu_copy, accelerator=copy_accel)
+        edit_menu.add_command(label="Paste", command=self.menu_paste, accelerator=paste_accel)
+        edit_menu.add_separator()
+        edit_menu.add_command(label="Select All", command=self.menu_select_all, accelerator=select_all_accel)
+
         # Create Help menu (on macOS, About will also appear in app menu via createcommand)
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Help", menu=help_menu)
@@ -380,6 +402,8 @@ class ChapterTimecodeGUI:
         
         # Configure text widgets for scrolling
         self.setup_scrolling_widgets()
+        
+
         
         # Create progress bar
         self.progress_bar = ttk.Progressbar(main_frame, mode='indeterminate')
@@ -993,6 +1017,199 @@ Copyright 2025 Dimitry Polivaev"""
         y = (self.root.winfo_y() + (self.root.winfo_height() // 2) - 
              (license_window.winfo_height() // 2))
         license_window.geometry(f"+{x}+{y}")
+
+
+
+    def menu_copy(self):
+        """Handle Copy from Edit menu."""
+        focused_widget = self.root.focus_get()
+        
+        if focused_widget == self.url_entry:
+            self.copy_entry_field(self.url_entry)
+        elif focused_widget == self.api_key_entry:
+            # Don't allow copying from API key field
+            messagebox.showwarning("Security", "Cannot copy from API key field for security reasons.")
+        elif focused_widget == self.output_dir_entry:
+            self.copy_entry_field(self.output_dir_entry)
+        elif focused_widget in [self.progress_text, self.subtitles_text, self.chapters_text]:
+            self.copy_text_selection()
+        else:
+            # Try to copy from currently active text widget
+            self.copy_current_tab()
+
+    def menu_paste(self):
+        """Handle Paste from Edit menu."""
+        focused_widget = self.root.focus_get()
+        
+        if focused_widget == self.url_entry:
+            self.paste_entry_field(self.url_entry)
+        elif focused_widget == self.api_key_entry:
+            self.paste_entry_field(self.api_key_entry)
+        elif focused_widget == self.output_dir_entry:
+            self.paste_entry_field(self.output_dir_entry)
+        # Text widgets are read-only, so no paste
+
+    def menu_select_all(self):
+        """Handle Select All from Edit menu."""
+        focused_widget = self.root.focus_get()
+        
+        if focused_widget in [self.url_entry, self.api_key_entry, self.output_dir_entry]:
+            self.select_all_entry_field(focused_widget)
+        elif focused_widget in [self.progress_text, self.subtitles_text, self.chapters_text]:
+            self.select_all_text_widget()
+
+    def menu_cut(self):
+        """Handle Cut from Edit menu."""
+        focused_widget = self.root.focus_get()
+        
+        if focused_widget == self.url_entry:
+            self.cut_entry_field(self.url_entry)
+        elif focused_widget == self.api_key_entry:
+            # Don't allow cutting from API key field
+            messagebox.showwarning("Security", "Cannot cut from API key field for security reasons.")
+        elif focused_widget == self.output_dir_entry:
+            self.cut_entry_field(self.output_dir_entry)
+        elif focused_widget in [self.progress_text, self.subtitles_text, self.chapters_text]:
+            # Text widgets are read-only, so no cutting allowed
+            messagebox.showwarning("Read-only", "Cannot cut from read-only text areas.")
+        # No fallback action needed
+
+    def copy_entry_field(self, entry_widget):
+        """Copy selected text from entry field to clipboard."""
+        try:
+            if entry_widget.selection_present():
+                text = entry_widget.selection_get()
+            else:
+                text = entry_widget.get()
+            
+            if text:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(text)
+                self.root.update()
+        except tk.TclError:
+            # No selection or other error
+            pass
+
+    def paste_entry_field(self, entry_widget):
+        """Paste text from clipboard to entry field."""
+        try:
+            clipboard_text = self.root.clipboard_get()
+            
+            if entry_widget.selection_present():
+                # Replace selection
+                entry_widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+                entry_widget.insert(tk.INSERT, clipboard_text)
+            else:
+                # Insert at cursor position
+                entry_widget.insert(tk.INSERT, clipboard_text)
+                
+        except tk.TclError:
+            # No clipboard content or other error
+            pass
+
+    def cut_entry_field(self, entry_widget):
+        """Cut selected text from entry field to clipboard."""
+        try:
+            if entry_widget.selection_present():
+                text = entry_widget.selection_get()
+                self.root.clipboard_clear()
+                self.root.clipboard_append(text)
+                self.root.update()
+                entry_widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            else:
+                # If no selection, copy all and delete
+                text = entry_widget.get()
+                self.root.clipboard_clear()
+                self.root.clipboard_append(text)
+                self.root.update()
+                entry_widget.delete(0, tk.END)
+        except tk.TclError:
+            # No selection or other error
+            pass
+
+    def select_all_entry_field(self, entry_widget):
+        """Select all text in entry field."""
+        entry_widget.select_range(0, tk.END)
+        entry_widget.icursor(tk.END)
+
+    def copy_text_selection(self):
+        """Copy selected text from text widget to clipboard."""
+        try:
+            # Determine which text widget has focus or selection
+            focused_widget = self.root.focus_get()
+            
+            if focused_widget == self.progress_text:
+                widget = self.progress_text
+            elif focused_widget == self.subtitles_text:
+                widget = self.subtitles_text
+            elif focused_widget == self.chapters_text:
+                widget = self.chapters_text
+            else:
+                # Default to current tab
+                selected_tab = self.notebook.index(self.notebook.select())
+                if selected_tab == 0:
+                    widget = self.progress_text
+                elif selected_tab == 1:
+                    widget = self.subtitles_text
+                elif selected_tab == 2:
+                    widget = self.chapters_text
+                else:
+                    return
+            
+            # Copy selection if any, otherwise copy all
+            try:
+                if widget.tag_ranges(tk.SEL):
+                    text = widget.selection_get()
+                else:
+                    text = widget.get(1.0, tk.END).strip()
+                
+                if text:
+                    self.root.clipboard_clear()
+                    self.root.clipboard_append(text)
+                    self.root.update()
+                    
+            except tk.TclError:
+                # No selection, copy all content
+                text = widget.get(1.0, tk.END).strip()
+                if text:
+                    self.root.clipboard_clear()
+                    self.root.clipboard_append(text)
+                    self.root.update()
+                    
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not copy text: {e}")
+
+
+
+    def select_all_text_widget(self):
+        """Select all text in the focused text widget."""
+        try:
+            focused_widget = self.root.focus_get()
+            
+            if focused_widget == self.progress_text:
+                widget = self.progress_text
+            elif focused_widget == self.subtitles_text:
+                widget = self.subtitles_text
+            elif focused_widget == self.chapters_text:
+                widget = self.chapters_text
+            else:
+                # Default to current tab
+                selected_tab = self.notebook.index(self.notebook.select())
+                if selected_tab == 0:
+                    widget = self.progress_text
+                elif selected_tab == 1:
+                    widget = self.subtitles_text
+                elif selected_tab == 2:
+                    widget = self.chapters_text
+                else:
+                    return
+            
+            widget.tag_add(tk.SEL, "1.0", tk.END)
+            widget.mark_set(tk.INSERT, "1.0")
+            widget.see(tk.INSERT)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not select text: {e}")
 
 def main():
     """Main function for GUI application."""
