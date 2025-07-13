@@ -2,6 +2,26 @@
 
 A Python application that downloads YouTube auto-generated subtitles and uses Google Gemini AI to generate chapter timecodes for the video content. Available as both a command-line tool and a modern GUI application.
 
+## 🚀 Quick Start - Ready-to-Use Applications
+
+**For most users, we recommend downloading the ready-to-use GUI applications:**
+
+✅ **Download from [GitHub Releases](../../releases)** - No Python installation required!
+
+- **macOS**: Download the `.dmg` file - just double-click to run
+- **Windows**: Download the `.exe` file - just double-click to run
+
+These standalone applications include everything you need and provide a modern, user-friendly interface. Just download, run, and start generating video chapters!
+
+**Note:** You'll still need to get your own [Google Gemini API key](https://aistudio.google.com/apikey) - the GUI will guide you through entering it securely.
+
+---
+
+**The Python installation instructions below are only needed if you want to:**
+- Use the command-line interface
+- Run the Python scripts directly
+- Modify or contribute to the code
+
 ## Features
 
 - **GUI Application**: Modern, user-friendly interface with real-time progress tracking
@@ -15,12 +35,12 @@ A Python application that downloads YouTube auto-generated subtitles and uses Go
 - Configurable Gemini models
 - Clean temporary file management
 
-## Prerequisites
+## Prerequisites (For Python Script Usage Only)
 
 - Python 3.7 or higher
 - Google Gemini API key
 
-## Installation
+## Installation (For Python Script Usage Only)
 
 1. Clone or download this repository
 2. Install required dependencies:
@@ -43,7 +63,7 @@ pip install -e .[dev]
 
 ### Get Google Gemini API Key
 
-1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
+1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
 2. Create a new API key
 3. For GUI: Enter the key in the application (it will be stored securely)
 4. For CLI: Set it as an environment variable or pass via argument:
