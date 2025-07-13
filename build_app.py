@@ -414,17 +414,18 @@ def main():
     parser.add_argument("--no-clean", action="store_true", help="Don't clean up build files")
     
     # Signing options
-    parser.add_argument("--sign", action="store_true", help="Enable code signing")
-    parser.add_argument("--signing-identity", help="Code signing identity")
-    parser.add_argument("--notary-profile", help="macOS notarization keychain profile")
-    parser.add_argument("--create-dmg", action="store_true", help="Create DMG package (macOS)")
+    parser.add_argument("--sign", action="store_true", help="Enable code signing (macOS only)")
+    if sys.platform == "darwin":
+        parser.add_argument("--signing-identity", help="Code signing identity (macOS only)")
+        parser.add_argument("--notary-profile", help="macOS notarization keychain profile")
+        parser.add_argument("--create-dmg", action="store_true", help="Create DMG package (macOS only)")
     
     # Windows signing options (certificate info is configured in codesign/codesign.bat)
     
     args = parser.parse_args()
     
-    # Validate signing requirements
-    if args.sign and sys.platform == "darwin" and not args.signing_identity:
+    # Validate signing requirements (macOS only)
+    if sys.platform == "darwin" and args.sign and not args.signing_identity:
         print("❌ --signing-identity required for macOS code signing")
         sys.exit(1)
     
