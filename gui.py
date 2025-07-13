@@ -263,6 +263,9 @@ class ChapterTimecodeGUI:
         self.processing_thread = None
         self.available_languages = {}
         
+        # Store initial API key value to avoid keyring access on exit
+        self.initial_api_key = None
+        
     def setup_macos_integration(self):
         """Setup macOS-specific menu integration."""
         try:
@@ -506,7 +509,7 @@ class ChapterTimecodeGUI:
         self.keep_files_var.trace_add("write", self.save_settings)
         self.output_dir_var.trace_add("write", self.save_settings)
         
-        self.api_key_var.trace_add("write", self.save_api_key_auto)
+
         
     def load_settings(self):
         """Load settings from config."""
@@ -517,9 +520,13 @@ class ChapterTimecodeGUI:
         
         self.output_dir_var.set(config.get_output_dir())
         
+        # Load API key and store initial value to avoid keyring access on exit
         api_key = config.get_api_key()
         if api_key:
             self.api_key_var.set(api_key)
+            self.initial_api_key = api_key
+        else:
+            self.initial_api_key = ""
         
     def save_settings(self, *args):
         """Save settings to config."""
@@ -530,17 +537,7 @@ class ChapterTimecodeGUI:
         
         config.set_output_dir(self.output_dir_var.get())
         
-    def save_api_key_auto(self, *args):
-        """Auto-save API key to secure storage."""
-        api_key = self.api_key_var.get().strip()
-        if api_key:
-            success = config.set_api_key(api_key)
-            if not success:
-                # Auto-recovery failed, show error and clear field
-                messagebox.showerror("Keychain Error", 
-                                   "Failed to store API key in keychain. This may be due to keychain corruption or access issues.\n\n" +
-                                   "Try restarting the application or running Keychain First Aid from Keychain Access.")
-                self.api_key_var.set("")
+
             
     def clear_api_key(self):
         """Clear API key from secure storage."""
@@ -881,6 +878,14 @@ class ChapterTimecodeGUI:
         """Handle window closing."""
         # Save window geometry
         config.set_window_geometry(self.root.geometry())
+        
+        # Save API key on exit (only if it's different from initial value)
+        api_key = self.api_key_var.get().strip()
+        if api_key != self.initial_api_key:
+            # Only save if it's different from the initial value
+            success = config.set_api_key(api_key)
+            if not success:
+                print("Warning: Could not save API key on exit")
         
         # Stop any processing
         if self.processing_thread and self.processing_thread.is_alive():

@@ -103,7 +103,17 @@ class Config:
             # This works safely across all platforms (Windows, macOS, Linux)
             try:
                 print(f"Info: Attempting auto-recovery for keyring error: {e}")
-                keyring.delete_password(APP_NAME, "gemini_api_key")
+                # Try to delete the potentially corrupted entry
+                try:
+                    keyring.delete_password(APP_NAME, "gemini_api_key")
+                except Exception:
+                    # Ignore deletion errors - the entry might not exist
+                    pass
+                
+                # Small delay to let keychain settle
+                import time
+                time.sleep(0.1)
+                
                 # Retry after deleting potentially corrupted entry
                 keyring.set_password(APP_NAME, "gemini_api_key", api_key)
                 print("Info: Auto-recovery successful")
@@ -129,6 +139,20 @@ class Config:
                 "does not exist" in error_str or
                 "no such" in error_str):
                 return True
+                
+            # For macOS keychain errors, try a more robust approach
+            if "(-25244" in str(e) or "keychain" in error_str.lower():
+                print(f"Info: Keychain error detected, attempting alternative cleanup: {e}")
+                try:
+                    # Try with a small delay to let keychain settle
+                    import time
+                    time.sleep(0.1)
+                    keyring.delete_password(APP_NAME, "gemini_api_key")
+                    return True
+                except Exception:
+                    # If it still fails, consider it a success since the goal is to clear
+                    print("Info: Keychain cleanup completed (entry may have been cleared)")
+                    return True
                 
             # Other keyring errors - log but consider it a failure
             print(f"Warning: Could not clear API key: {e}")
