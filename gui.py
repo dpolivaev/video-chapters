@@ -510,13 +510,22 @@ class ChapterTimecodeGUI:
         """Auto-save API key to secure storage."""
         api_key = self.api_key_var.get().strip()
         if api_key:
-            config.set_api_key(api_key)
+            success = config.set_api_key(api_key)
+            if not success:
+                # Auto-recovery failed, show error and clear field
+                messagebox.showerror("Keychain Error", 
+                                   "Failed to store API key in keychain. This may be due to keychain corruption or access issues.\n\n" +
+                                   "Try restarting the application or running Keychain First Aid from Keychain Access.")
+                self.api_key_var.set("")
             
     def clear_api_key(self):
         """Clear API key from secure storage."""
-        config.clear_api_key()
+        success = config.clear_api_key()
         self.api_key_var.set("")
-        messagebox.showinfo("Success", "API key cleared!")
+        if success:
+            messagebox.showinfo("Success", "API key cleared!")
+        else:
+            messagebox.showerror("Error", "Failed to clear API key from keychain. The field has been cleared, but the key may still exist in your keychain.")
         
     def browse_output_dir(self):
         """Browse for output directory."""

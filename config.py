@@ -89,19 +89,50 @@ class Config:
             print(f"Warning: Could not retrieve API key: {e}")
             return None
     
-    def set_api_key(self, api_key: str):
-        """Store API key in secure storage."""
+    def set_api_key(self, api_key: str) -> bool:
+        """Store API key in secure storage with universal auto-recovery.
+        
+        Returns:
+            bool: True if successful, False if failed even after auto-recovery
+        """
         try:
             keyring.set_password(APP_NAME, "gemini_api_key", api_key)
+            return True
         except Exception as e:
-            print(f"Warning: Could not store API key: {e}")
+            # Universal auto-recovery: try to delete corrupted entry and retry
+            # This works safely across all platforms (Windows, macOS, Linux)
+            try:
+                print(f"Info: Attempting auto-recovery for keyring error: {e}")
+                keyring.delete_password(APP_NAME, "gemini_api_key")
+                # Retry after deleting potentially corrupted entry
+                keyring.set_password(APP_NAME, "gemini_api_key", api_key)
+                print("Info: Auto-recovery successful")
+                return True
+            except Exception as recovery_error:
+                print(f"Warning: Auto-recovery failed: {recovery_error}")
+                return False
     
-    def clear_api_key(self):
-        """Clear API key from secure storage."""
+    def clear_api_key(self) -> bool:
+        """Clear API key from secure storage with universal error handling.
+        
+        Returns:
+            bool: True if successful, False if failed
+        """
         try:
             keyring.delete_password(APP_NAME, "gemini_api_key")
+            return True
         except Exception as e:
+            error_str = str(e).lower()
+            
+            # For deletion, "not found" errors are actually success across all platforms
+            if ("not found" in error_str or 
+                "does not exist" in error_str or
+                "no such" in error_str):
+                return True
+                
+            # Other keyring errors - log but consider it a failure
             print(f"Warning: Could not clear API key: {e}")
+            return False
     
     def get_setting(self, key: str, default: Any = None) -> Any:
         """Get a setting value."""
