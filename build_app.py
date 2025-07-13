@@ -307,7 +307,13 @@ def build_gui_app(args):
         app_name = "Chapter Timecodes"
     
     # Build command - use PyInstaller's built-in signing for macOS
-    cmd = f'pyinstaller --onedir --windowed --name "{app_name}" {icon_flag} --add-data "LICENSE:."'
+    # Use --onefile for Windows/Linux to avoid subdirectory, --onedir for macOS for better performance
+    if sys.platform == "darwin":
+        # macOS uses --onedir which handles local modules better
+        cmd = f'pyinstaller --onedir --windowed --name "{app_name}" {icon_flag} --add-data "LICENSE:."'
+    else:
+        # Windows/Linux use --onefile which needs explicit module inclusion
+        cmd = f'pyinstaller --onefile --windowed --name "{app_name}" {icon_flag} --add-data "LICENSE:." --add-data "config.py:." --add-data "core.py:."'
     
     # Add macOS signing parameters directly to PyInstaller
     if sys.platform == "darwin" and args.sign and args.signing_identity:
