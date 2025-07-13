@@ -8,7 +8,7 @@ A Python application that downloads YouTube auto-generated subtitles and uses Go
 
 ✅ **Download from [GitHub Releases](../../releases)** - No Python installation required!
 
-- **macOS**: Download the `.dmg` file - just double-click to run
+- **MacOS (Apple Silicon)**: Download the `.dmg` file - just double-click to run
 - **Windows**: Download the `.exe` file - just double-click to run
 
 These standalone applications include everything you need and provide a modern, user-friendly interface. Just download, run, and start generating video chapters!
