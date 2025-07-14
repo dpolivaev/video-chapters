@@ -301,8 +301,19 @@ def build_gui_app(args):
         cmd = f'pyinstaller --onedir --windowed --name "{app_name}" {icon_flag} --add-data "LICENSE:."'
     else:
         # Windows/Linux use --onefile which needs explicit module inclusion
+        # For Windows, ensure icon is properly embedded by using absolute path
+        if sys.platform == "win32" and icon_flag:
+            # Use absolute path for Windows icon to ensure proper embedding
+            icon_abs_path = icon_path.absolute()
+            icon_flag = f"--icon={icon_abs_path}"
+        
         cmd = f'pyinstaller --onefile --windowed --name "{app_name}" {icon_flag} --add-data "LICENSE:." --add-data "config.py:." --add-data "core.py:."'
-    
+        
+        # Add icon as data for runtime access (in addition to embedding)
+        if icon_flag and icon_path.exists():
+            cmd += f' --add-data "{icon_path}:."'
+
+
     # Add macOS signing parameters directly to PyInstaller
     if sys.platform == "darwin" and args.sign and args.signing_identity:
         full_identity = find_signing_identity(args.signing_identity)

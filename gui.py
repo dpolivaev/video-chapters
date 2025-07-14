@@ -54,6 +54,10 @@ class ChapterTimecodeGUI:
         # Set window icon
         self.setup_icon()
         
+        # Windows-specific taskbar icon setup
+        if sys.platform == "win32":
+            self.setup_windows_taskbar_icon()
+        
         # Configure for better DPI handling
         self.setup_dpi_scaling()
         
@@ -97,6 +101,8 @@ class ChapterTimecodeGUI:
             # Platform-specific icon handling
             if sys.platform == "win32":
                 # Windows - use .ico file
+                # In PyInstaller, the icon should already be embedded in the executable
+                # But we can still try to set it for the window
                 icon_path = base_path / "icon.ico"
                 if icon_path.exists():
                     self.root.iconbitmap(str(icon_path))
@@ -105,12 +111,31 @@ class ChapterTimecodeGUI:
                     alt_paths = [
                         base_path / "assets" / "icon.ico",
                         base_path / "icons" / "icon.ico",
-                        Path("icon.ico")
+                        Path("icon.ico"),
+                        Path("build/icon.ico")  # Add build directory path
                     ]
                     for alt_path in alt_paths:
                         if alt_path.exists():
                             self.root.iconbitmap(str(alt_path))
                             break
+                    else:
+                        # If no .ico file found, try using PNG as fallback
+                        png_path = base_path / "icon.png"
+                        if png_path.exists():
+                            try:
+                                icon_image = tk.PhotoImage(file=str(png_path))
+                                self.root.iconphoto(True, icon_image)
+                            except Exception as png_error:
+                                print(f"Warning: Could not load PNG icon: {png_error}")
+                        else:
+                            # Try build directory for PNG
+                            build_png = Path("build/icon.png")
+                            if build_png.exists():
+                                try:
+                                    icon_image = tk.PhotoImage(file=str(build_png))
+                                    self.root.iconphoto(True, icon_image)
+                                except Exception as png_error:
+                                    print(f"Warning: Could not load PNG icon from build: {png_error}")
                             
             elif sys.platform == "darwin":
                 # macOS - use .icns file via iconphoto (iconbitmap doesn't work well on macOS)
@@ -151,6 +176,71 @@ class ChapterTimecodeGUI:
         except Exception as e:
             # If icon loading fails, just continue without icon
             print(f"Warning: Could not load application icon: {e}")
+        
+    def setup_windows_taskbar_icon(self):
+        """Set up Windows taskbar icon using Windows API."""
+        try:
+            import ctypes
+            from ctypes import wintypes
+            
+            # Get the window handle
+            hwnd = self.root.winfo_id()
+            
+            # Load the icon from the executable (should be embedded by PyInstaller)
+            # Try to load from the current executable first
+            try:
+                # Get the executable path
+                if hasattr(sys, '_MEIPASS'):
+                    # PyInstaller environment - icon should be embedded
+                    exe_path = sys.executable
+                else:
+                    # Development environment
+                    exe_path = sys.executable
+                
+                # Load the icon from the executable
+                icon_handle = ctypes.windll.shell32.ExtractIconW(
+                    ctypes.windll.kernel32.GetModuleHandleW(None),
+                    exe_path,
+                    0
+                )
+                
+                if icon_handle:
+                    # Set the window icon
+                    ctypes.windll.user32.SendMessageW(hwnd, 0x80, 0, icon_handle)  # WM_SETICON, ICON_SMALL
+                    ctypes.windll.user32.SendMessageW(hwnd, 0x80, 1, icon_handle)  # WM_SETICON, ICON_BIG
+                    
+            except Exception as exe_error:
+                print(f"Warning: Could not load icon from executable: {exe_error}")
+                
+                # Fallback: try to load from icon file
+                try:
+                    if hasattr(sys, '_MEIPASS'):
+                        base_path = Path(sys._MEIPASS)
+                    else:
+                        base_path = Path(".")
+                    
+                    icon_path = base_path / "icon.ico"
+                    if not icon_path.exists():
+                        icon_path = Path("build/icon.ico")
+                    
+                    if icon_path.exists():
+                        # Load icon from file
+                        icon_handle = ctypes.windll.shell32.ExtractIconW(
+                            ctypes.windll.kernel32.GetModuleHandleW(None),
+                            str(icon_path),
+                            0
+                        )
+                        
+                        if icon_handle:
+                            # Set the window icon
+                            ctypes.windll.user32.SendMessageW(hwnd, 0x80, 0, icon_handle)  # WM_SETICON, ICON_SMALL
+                            ctypes.windll.user32.SendMessageW(hwnd, 0x80, 1, icon_handle)  # WM_SETICON, ICON_BIG
+                            
+                except Exception as file_error:
+                    print(f"Warning: Could not load icon from file: {file_error}")
+                    
+        except Exception as e:
+            print(f"Warning: Could not set Windows taskbar icon: {e}")
         
     def setup_dpi_scaling(self):
         """Configure DPI scaling for better appearance on high-DPI displays."""
