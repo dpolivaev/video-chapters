@@ -11,6 +11,8 @@ A Python application that downloads YouTube auto-generated subtitles and uses Go
 - **MacOS (Apple Silicon)**: Download the `.dmg` file - just double-click to run
 - **Windows**: Download the `.exe` file - just double-click to run
 
+> **Windows users:** If the app does not start or shows a DLL error, install the [Microsoft Visual C++ 2015-2022 Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe) from Microsoft.
+
 These standalone applications include everything you need and provide a modern, user-friendly interface. Just download, run, and start generating video chapters!
 
 **Note:** You'll still need to get your own [Google Gemini API key](https://aistudio.google.com/apikey) - the GUI will guide you through entering it securely.
