@@ -764,6 +764,7 @@ class ChapterTimecodeGUI:
         """Process video in background thread."""
         try:
             self.update_status("Processing video...")
+            self.stopping = False
             
             # Create processor
             self.processor = VideoProcessor(self.log_progress)
@@ -779,10 +780,46 @@ class ChapterTimecodeGUI:
                 custom_instructions=self.instructions_text.get(1.0, tk.END).strip()
             )
             
-            # Process video
-            subtitle_info, gemini_response = self.processor.process_video(url, options)
+            # Check if stopping was requested
+            if self.stopping:
+                return
             
-            # Update UI with results
+            # Download subtitles first
+            subtitle_info = self.processor.download_subtitles(
+                url, 
+                options.language, 
+                options.output_dir
+            )
+            
+            # Check if stopping was requested
+            if self.stopping:
+                return
+            
+            # Show subtitles immediately after download
+            if subtitle_info:
+                self.root.after(0, self.show_subtitles, subtitle_info)
+            
+            # Process with Gemini if API key provided
+            gemini_response = None
+            if options.api_key:
+                # Mark that Gemini processing has started
+                self.gemini_started = True
+                
+                # Disable stop button - can't abort API calls
+                self.root.after(0, lambda: self.stop_btn.config(state=tk.DISABLED))
+                
+                gemini_response = self.processor.process_with_gemini(
+                    subtitle_info.content,
+                    options.api_key,
+                    options.model,
+                    options.custom_instructions
+                )
+                
+                # Show chapters when generated
+                if gemini_response:
+                    self.root.after(0, self.show_chapters, gemini_response)
+            
+            # Update UI with final results
             self.root.after(0, self.show_results, subtitle_info, gemini_response)
             
         except Exception as e:
@@ -795,16 +832,29 @@ class ChapterTimecodeGUI:
         self.process_btn.config(state=tk.NORMAL)
         self.stop_btn.config(state=tk.DISABLED)
         self.progress_bar.stop()
+        
+        # Clean up temporary files only if processing completed (not stopped)
+        if hasattr(self, 'processor') and self.processor and not self.stopping:
+            self.processor.cleanup()
+        
         self.update_status("Ready")
+        
+        # Reset processing flags
+        self.stopping = False
+        self.gemini_started = False
         
     def stop_processing(self):
         """Stop the current processing."""
         if self.processing_thread and self.processing_thread.is_alive():
-            # Note: This is a graceful stop - we can't forcefully kill threads
-            if self.processor:
-                self.processor.cleanup()
-            self.update_status("Stopping...")
+            # Check if we can actually stop (before Gemini processing starts)
+            if hasattr(self, 'gemini_started') and self.gemini_started:
+                messagebox.showinfo("Info", "Cannot stop processing after Gemini API request has been sent. The operation will complete.")
+                return
             
+            # Mark that we're stopping to prevent further operations
+            self.stopping = True
+            self.update_status("Stopping...")
+        
     def log_progress(self, message: str):
         """Log progress message."""
         self.root.after(0, self.append_progress, message)
@@ -814,19 +864,29 @@ class ChapterTimecodeGUI:
         self.progress_text.insert(tk.END, message + "\n")
         self.progress_text.see(tk.END)
         
+    def show_subtitles(self, subtitle_info):
+        """Show subtitles and switch to subtitles tab."""
+        self.subtitles_text.delete(1.0, tk.END)
+        self.subtitles_text.insert(tk.END, subtitle_info.content)
+        self.notebook.select(2)  # Switch to subtitles tab (index 2)
+        
+    def show_chapters(self, gemini_response):
+        """Show chapters and switch to chapters tab."""
+        self.chapters_text.delete(1.0, tk.END)
+        self.chapters_text.insert(tk.END, gemini_response)
+        self.notebook.select(3)  # Switch to chapters tab (index 3)
+        
     def show_results(self, subtitle_info, gemini_response):
         """Show processing results."""
         # Show subtitles
         if subtitle_info:
             self.subtitles_text.delete(1.0, tk.END)
             self.subtitles_text.insert(tk.END, subtitle_info.content)
-            self.notebook.select(1)  # Switch to subtitles tab
             
         # Show chapters
         if gemini_response:
             self.chapters_text.delete(1.0, tk.END)
             self.chapters_text.insert(tk.END, gemini_response)
-            self.notebook.select(2)  # Switch to chapters tab
             
         self.update_status("Processing completed successfully!")
         
