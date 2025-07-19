@@ -71,6 +71,9 @@ class ChapterTimecodeGUI:
         # Setup variables
         self.setup_variables()
         
+        # Load saved settings before setting up bindings
+        self.load_settings()
+        
         # macOS-specific setup
         if sys.platform == "darwin":
             self.setup_macos_integration()
@@ -81,11 +84,8 @@ class ChapterTimecodeGUI:
         # Create main widgets
         self.create_widgets()
         
-        # Setup bindings
+        # Setup bindings (after loading settings)
         self.setup_bindings()
-        
-        # Load saved settings
-        self.load_settings()
         
     def setup_icon(self):
         """Set up the application icon for different platforms."""
@@ -348,7 +348,6 @@ class ChapterTimecodeGUI:
         self.output_dir_var = tk.StringVar()
         self.progress_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Ready")
-        self.custom_instructions_var = tk.StringVar()
         
         self.processor = None
         self.processing_thread = None
@@ -564,15 +563,15 @@ class ChapterTimecodeGUI:
         self.instructions_text.pack(fill=tk.BOTH, expand=True)
         self.instructions_text.configure(selectbackground='#0078d4', selectforeground='white')
         
-        # Bind the text widget to the variable for persistence
+        # Bind the text widget to handle tip visibility
         self.instructions_text.bind('<KeyRelease>', self._on_instructions_change)
         
         # Load saved instructions
-        custom_instructions = self.custom_instructions_var.get()
+        custom_instructions = config.get_setting("custom_instructions", "")
         if custom_instructions:
             self.instructions_text.insert(tk.END, custom_instructions)
             self.instructions_tip_label.pack_forget()  # Hide tip if there's content
-        
+            
     def _on_instructions_change(self, event=None):
         """Handle changes to the instructions text widget."""
         content = self.instructions_text.get(1.0, tk.END).strip()
@@ -583,9 +582,6 @@ class ChapterTimecodeGUI:
         else:
             self.instructions_tip_label.pack(anchor=tk.W, padx=5, pady=(5, 0))  # Show tip when empty
             
-        self.custom_instructions_var.set(content)
-        self.save_settings()
-        
     def create_subtitles_tab(self, parent_frame):
         """Create and configure the subtitles tab."""
         text_font = (self.mono_font, int(10 * self.font_scale))
@@ -634,14 +630,6 @@ class ChapterTimecodeGUI:
         """Setup event bindings."""
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        self.url_var.trace_add("write", self.save_settings)
-        self.model_var.trace_add("write", self.save_settings)
-        self.language_var.trace_add("write", self.save_settings)
-        self.keep_files_var.trace_add("write", self.save_settings)
-        self.output_dir_var.trace_add("write", self.save_settings)
-        
-
-        
     def load_settings(self):
         """Load saved settings."""
         self.url_var.set(config.get_last_url())
@@ -650,15 +638,14 @@ class ChapterTimecodeGUI:
         self.keep_files_var.set(config.get_keep_files())
         self.output_dir_var.set(config.get_output_dir())
         
-        # Load custom instructions
-        custom_instructions = config.get_setting("custom_instructions", "")
-        self.custom_instructions_var.set(custom_instructions)
-        
         # Load API key
         api_key = config.get_api_key()
         if api_key:
             self.api_key_var.set(api_key)
             self.initial_api_key = api_key
+        else:
+            # Ensure initial_api_key is set even when no key is loaded
+            self.initial_api_key = ""
         
     def save_settings(self, *args):
         """Save current settings."""
@@ -667,7 +654,10 @@ class ChapterTimecodeGUI:
         config.set_language(self.language_var.get() if self.language_var.get() != "Auto-detect" else "")
         config.set_keep_files(self.keep_files_var.get())
         config.set_output_dir(self.output_dir_var.get())
-        config.set_setting("custom_instructions", self.custom_instructions_var.get())
+        
+        # Get custom instructions directly from the widget
+        custom_instructions = self.instructions_text.get(1.0, tk.END).strip()
+        config.set_setting("custom_instructions", custom_instructions)
         
         # Save API key if changed
         current_api_key = self.api_key_var.get()
@@ -786,7 +776,7 @@ class ChapterTimecodeGUI:
                 keep_files=self.keep_files_var.get(),
                 output_dir=self.output_dir_var.get() if self.output_dir_var.get() else None,
                 show_subtitles=False,
-                custom_instructions=self.custom_instructions_var.get().strip()
+                custom_instructions=self.instructions_text.get(1.0, tk.END).strip()
             )
             
             # Process video
@@ -1018,17 +1008,13 @@ class ChapterTimecodeGUI:
         self.status_var.set(message)
         
     def on_closing(self):
-        """Handle window closing."""
+        """Handle application closing."""
         # Save window geometry
-        config.set_window_geometry(self.root.geometry())
+        geometry = self.root.geometry()
+        config.set_window_geometry(geometry)
         
-        # Save API key on exit (only if it's different from initial value)
-        api_key = self.api_key_var.get().strip()
-        if api_key != self.initial_api_key:
-            # Only save if it's different from the initial value
-            success = config.set_api_key(api_key)
-            if not success:
-                print("Warning: Could not save API key on exit")
+        # Save all settings
+        self.save_settings()
         
         # Stop any processing
         if self.processing_thread and self.processing_thread.is_alive():
