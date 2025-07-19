@@ -348,6 +348,7 @@ class ChapterTimecodeGUI:
         self.output_dir_var = tk.StringVar()
         self.progress_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Ready")
+        self.custom_instructions_var = tk.StringVar()
         
         self.processor = None
         self.processing_thread = None
@@ -471,6 +472,10 @@ class ChapterTimecodeGUI:
         self.notebook = ttk.Notebook(main_frame, style='Custom.TNotebook')
         self.notebook.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
         
+        # Your Instructions tab
+        self.instructions_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.instructions_frame, text="Your Instructions")
+        
         # Progress tab
         self.progress_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.progress_frame, text="Progress")
@@ -489,6 +494,7 @@ class ChapterTimecodeGUI:
         self.notebook.add(self.chapters_frame, text="Chapters")
         
         # Create text widgets for each tab
+        self.create_instructions_tab(self.instructions_frame)
         self.create_progress_tab(self.progress_frame)
         self.create_subtitles_tab(self.subtitles_frame)
         self.create_chapters_tab(self.chapters_frame)
@@ -544,6 +550,41 @@ class ChapterTimecodeGUI:
         self.progress_text.bind('<MouseWheel>', self._on_mousewheel)
         self.progress_text.bind('<Button-4>', self._on_mousewheel)
         self.progress_text.bind('<Button-5>', self._on_mousewheel)
+        
+    def create_instructions_tab(self, parent_frame):
+        """Create and configure the instructions tab."""
+        # Add tip label above the text widget
+        self.instructions_tip_label = ttk.Label(parent_frame, text="You can enter custom instructions here...", 
+                                               foreground="gray", font=("TkDefaultFont", 9))
+        self.instructions_tip_label.pack(anchor=tk.W, padx=5, pady=(5, 0))
+        
+        text_font = (self.mono_font, int(10 * self.font_scale))
+        self.instructions_text = scrolledtext.ScrolledText(parent_frame, height=12, width=80,
+                                                          wrap=tk.WORD, state=tk.NORMAL, font=text_font)
+        self.instructions_text.pack(fill=tk.BOTH, expand=True)
+        self.instructions_text.configure(selectbackground='#0078d4', selectforeground='white')
+        
+        # Bind the text widget to the variable for persistence
+        self.instructions_text.bind('<KeyRelease>', self._on_instructions_change)
+        
+        # Load saved instructions
+        custom_instructions = self.custom_instructions_var.get()
+        if custom_instructions:
+            self.instructions_text.insert(tk.END, custom_instructions)
+            self.instructions_tip_label.pack_forget()  # Hide tip if there's content
+        
+    def _on_instructions_change(self, event=None):
+        """Handle changes to the instructions text widget."""
+        content = self.instructions_text.get(1.0, tk.END).strip()
+        
+        # Show/hide tip label based on content
+        if content:
+            self.instructions_tip_label.pack_forget()  # Hide tip when there's content
+        else:
+            self.instructions_tip_label.pack(anchor=tk.W, padx=5, pady=(5, 0))  # Show tip when empty
+            
+        self.custom_instructions_var.set(content)
+        self.save_settings()
         
     def create_subtitles_tab(self, parent_frame):
         """Create and configure the subtitles tab."""
@@ -602,33 +643,38 @@ class ChapterTimecodeGUI:
 
         
     def load_settings(self):
-        """Load settings from config."""
+        """Load saved settings."""
         self.url_var.set(config.get_last_url())
         self.model_var.set(config.get_model())
-        self.language_var.set(config.get_language() or "Auto-detect")
+        self.language_var.set(config.get_language() if config.get_language() else "Auto-detect")
         self.keep_files_var.set(config.get_keep_files())
-        
         self.output_dir_var.set(config.get_output_dir())
         
-        # Load API key and store initial value to avoid keyring access on exit
+        # Load custom instructions
+        custom_instructions = config.get_setting("custom_instructions", "")
+        self.custom_instructions_var.set(custom_instructions)
+        
+        # Load API key
         api_key = config.get_api_key()
         if api_key:
             self.api_key_var.set(api_key)
             self.initial_api_key = api_key
-        else:
-            self.initial_api_key = ""
         
     def save_settings(self, *args):
-        """Save settings to config."""
+        """Save current settings."""
         config.set_last_url(self.url_var.get())
         config.set_model(self.model_var.get())
         config.set_language(self.language_var.get() if self.language_var.get() != "Auto-detect" else "")
         config.set_keep_files(self.keep_files_var.get())
-        
         config.set_output_dir(self.output_dir_var.get())
+        config.set_setting("custom_instructions", self.custom_instructions_var.get())
         
-
-            
+        # Save API key if changed
+        current_api_key = self.api_key_var.get()
+        if current_api_key != self.initial_api_key:
+            config.set_api_key(current_api_key)
+            self.initial_api_key = current_api_key
+        
     def clear_api_key(self):
         """Clear API key from secure storage."""
         success = config.clear_api_key()
@@ -711,6 +757,9 @@ class ChapterTimecodeGUI:
         # Clear previous results
         self.clear_results()
         
+        # Switch to progress tab to show processing status
+        self.notebook.select(1)  # Progress tab is at index 1
+        
         # Start processing
         self.processing_thread = threading.Thread(target=self.process_video_thread, args=(url, api_key))
         self.processing_thread.daemon = True
@@ -736,7 +785,8 @@ class ChapterTimecodeGUI:
                 model=self.model_var.get(),
                 keep_files=self.keep_files_var.get(),
                 output_dir=self.output_dir_var.get() if self.output_dir_var.get() else None,
-                show_subtitles=False
+                show_subtitles=False,
+                custom_instructions=self.custom_instructions_var.get().strip()
             )
             
             # Process video
@@ -888,50 +938,53 @@ class ChapterTimecodeGUI:
         """Copy content from the currently selected tab to clipboard."""
         selected_tab = self.notebook.index(self.notebook.select())
         
-        if selected_tab == 0: # Progress tab
+        if selected_tab == 0: # Instructions tab
+            content = self.instructions_text.get(1.0, tk.END).strip()
+            tab_name = "Instructions"
+        elif selected_tab == 1: # Progress tab
             content = self.progress_text.get(1.0, tk.END).strip()
             tab_name = "Progress"
-        elif selected_tab == 1: # Subtitles tab
+        elif selected_tab == 2: # Subtitles tab
             content = self.subtitles_text.get(1.0, tk.END).strip()
             tab_name = "Subtitles"
-        elif selected_tab == 2: # Chapters tab
+        elif selected_tab == 3: # Chapters tab
             content = self.chapters_text.get(1.0, tk.END).strip()
             tab_name = "Chapters"
         else:
-            messagebox.showwarning("Warning", "No content to copy from this tab.")
             return
-            
-        if not content:
-            messagebox.showwarning("Warning", f"No {tab_name} content to copy.")
-            return
-            
-        self.copy_to_clipboard(content, tab_name)
+        
+        if content:
+            self.copy_to_clipboard(content, tab_name)
+        else:
+            messagebox.showinfo("Info", f"No content to copy from {tab_name} tab.")
         
     def save_current_tab(self):
-        """Save content from the currently selected tab to a file."""
+        """Save content from the currently selected tab to file."""
         selected_tab = self.notebook.index(self.notebook.select())
         
-        if selected_tab == 0: # Progress tab
+        if selected_tab == 0: # Instructions tab
+            content = self.instructions_text.get(1.0, tk.END).strip()
+            tab_name = "Instructions"
+            default_name = "instructions"
+        elif selected_tab == 1: # Progress tab
             content = self.progress_text.get(1.0, tk.END).strip()
-            default_name = "progress"
             tab_name = "Progress"
-        elif selected_tab == 1: # Subtitles tab
+            default_name = "progress"
+        elif selected_tab == 2: # Subtitles tab
             content = self.subtitles_text.get(1.0, tk.END).strip()
-            default_name = "subtitles"
             tab_name = "Subtitles"
-        elif selected_tab == 2: # Chapters tab
+            default_name = "subtitles"
+        elif selected_tab == 3: # Chapters tab
             content = self.chapters_text.get(1.0, tk.END).strip()
-            default_name = "chapters"
             tab_name = "Chapters"
+            default_name = "chapters"
         else:
-            messagebox.showwarning("Warning", "No content to save from this tab.")
             return
-            
-        if not content:
-            messagebox.showwarning("Warning", f"No {tab_name} content to save.")
-            return
-            
-        self.save_content(content, default_name, f"Save {tab_name}")
+        
+        if content:
+            self.save_content(content, default_name, f"Save {tab_name}")
+        else:
+            messagebox.showinfo("Info", f"No content to save from {tab_name} tab.")
         
     def copy_to_clipboard(self, content: str, content_type: str):
         """Copy content to system clipboard."""

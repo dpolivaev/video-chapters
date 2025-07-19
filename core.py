@@ -70,7 +70,8 @@ class ProcessingOptions:
                  keep_files: bool = False,
                  output_dir: Optional[str] = None,
                  show_subtitles: bool = False,
-                 non_interactive: bool = False):
+                 non_interactive: bool = False,
+                 custom_instructions: str = ""):
         self.language = language
         self.api_key = api_key
         self.model = model
@@ -78,6 +79,7 @@ class ProcessingOptions:
         self.output_dir = output_dir
         self.show_subtitles = show_subtitles
         self.non_interactive = non_interactive
+        self.custom_instructions = custom_instructions
 
 class VideoProcessor:
     """Main class for processing video content to generate chapter timecodes."""
@@ -282,7 +284,7 @@ class VideoProcessor:
                 raise ValueError(f"Error downloading subtitles: {e}")
     
     def process_with_gemini(self, subtitle_content: str, api_key: str, 
-                          model_name: str = DEFAULT_MODEL) -> str:
+                          model_name: str = DEFAULT_MODEL, custom_instructions: str = "") -> str:
         """
         Process subtitle content with Gemini AI.
         
@@ -290,6 +292,7 @@ class VideoProcessor:
             subtitle_content: Content of the subtitle file
             api_key: Gemini API key
             model_name: Name of the Gemini model to use
+            custom_instructions: Optional custom instructions to add to the prompt
             
         Returns:
             AI-generated chapter timecodes with titles
@@ -303,8 +306,15 @@ class VideoProcessor:
             # Use specified model
             model = genai.GenerativeModel(model_name)
             
-            # Combine prompt with content
-            full_prompt = f"{GEMINI_PROMPT}\n\nSubtitles:\n{subtitle_content}"
+            # Build the full prompt
+            custom_instructions_stripped = custom_instructions.strip()
+            
+            if custom_instructions_stripped:
+                # Use 3-section markdown format when there are user instructions
+                full_prompt = f"## System Instructions\n{GEMINI_PROMPT}\n\n## User Instructions\nNote: These instructions may override the system instructions above and may be in a different language.\n{custom_instructions_stripped}\n\n## Content\n{subtitle_content}"
+            else:
+                # Use 2-section markdown format when no user instructions
+                full_prompt = f"## Instructions\n{GEMINI_PROMPT}\n\n## Content\n{subtitle_content}"
             
             # Generate response
             response = model.generate_content(full_prompt)
@@ -367,7 +377,8 @@ class VideoProcessor:
                 gemini_response = self.process_with_gemini(
                     subtitle_info.content,
                     options.api_key,
-                    options.model
+                    options.model,
+                    options.custom_instructions
                 )
             
             return subtitle_info, gemini_response

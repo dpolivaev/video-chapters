@@ -59,7 +59,8 @@ class Config:
             "non_interactive": False,
             "output_dir": "",
             "window_geometry": "800x600",
-            "last_url": ""
+            "last_url": "",
+            "custom_instructions": ""
         }
         
         if CONFIG_FILE.exists():
