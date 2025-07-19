@@ -21,6 +21,43 @@ build/
 dist/
 *.spec
 
+# Additional build artifacts
+temp_dmg/
+*.app/
+*.dmg
+*.pkg
+*.deb
+*.rpm
+*.exe
+*.msi
+*.appimage
+
+# macOS build artifacts
+*.icns
+*.iconset/
+*.app/Contents/MacOS/
+*.app/Contents/Resources/
+*.app/Contents/Info.plist
+
+# Windows build artifacts
+*.ico
+*.exe
+*.msi
+*.msix
+
+# Linux build artifacts
+*.AppImage
+*.deb
+*.rpm
+
+# Temporary build files
+*.tmp
+*.temp
+*.log
+*.pid
+*.seed
+*.pid.lock
+
 # Python
 __pycache__/
 *.py[cod]
@@ -90,14 +127,6 @@ $RECYCLE.BIN/
 
 # Linux
 *~
-
-# Temporary files
-*.tmp
-*.temp
-*.log
-*.pid
-*.seed
-*.pid.lock
 
 # Downloaded subtitles and chapters (if saved locally)
 subtitles-*.txt
