@@ -329,8 +329,10 @@ class ChapterTimecodeGUI:
         style.configure('Section.TLabel', font=(ui_font, section_size, 'bold'))
         style.configure('Info.TLabel', font=(ui_font, info_size), foreground='gray')
         
-        # Configure notebook style with scaled padding
-        padding = [int(20 * self.font_scale), int(10 * self.font_scale)]
+        # Configure notebook style with reduced padding scaling
+        # Use a smaller scaling factor for padding to avoid excessive gaps
+        padding_scale = min(self.font_scale, 1.1)  # Cap padding scaling at 1.1
+        padding = [int(20 * padding_scale), int(10 * padding_scale)]
         style.configure('Custom.TNotebook', tabposition='n')
         style.configure('Custom.TNotebook.Tab', padding=padding)
         
@@ -402,8 +404,8 @@ class ChapterTimecodeGUI:
 
     def create_widgets(self):
         """Create main GUI widgets."""
-        # Main container
-        main_frame = ttk.Frame(self.root, padding="10")
+        # Main container - reduced padding for more compact layout
+        main_frame = ttk.Frame(self.root, padding="5")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Configure grid weights
@@ -415,61 +417,63 @@ class ChapterTimecodeGUI:
         # Title
         title_label = ttk.Label(main_frame, text=config.get_app_title(), 
                                style='Title.TLabel')
-        title_label.grid(row=0, column=0, columnspan=3, pady=(0, 20))
+        title_label.grid(row=0, column=0, columnspan=3, pady=(0, 10))
         
         # URL input
-        ttk.Label(main_frame, text="YouTube video URL:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="YouTube video URL:").grid(row=1, column=0, sticky=tk.W, pady=2)
         self.url_entry = ttk.Entry(main_frame, textvariable=self.url_var, width=50)
-        self.url_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=5, padx=(5, 0))
+        self.url_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=2, padx=(5, 0))
         
         # Check languages button
         self.check_langs_btn = ttk.Button(main_frame, text="Check Languages", 
-                                         command=self.check_languages)
-        self.check_langs_btn.grid(row=1, column=2, pady=5, padx=(5, 0))
+                                         command=self.check_languages, width=15)
+        self.check_langs_btn.grid(row=1, column=2, pady=2, padx=(5, 0))
         
         # API Key input
-        ttk.Label(main_frame, text="Gemini API Key:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Gemini API Key:").grid(row=2, column=0, sticky=tk.W, pady=2)
         self.api_key_entry = ttk.Entry(main_frame, textvariable=self.api_key_var, width=50, show="*")
-        self.api_key_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=5, padx=(5, 0))
+        self.api_key_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=2, padx=(5, 0))
         
         # API Key buttons
         api_key_frame = ttk.Frame(main_frame)
-        api_key_frame.grid(row=2, column=2, pady=5, padx=(5, 0))
+        api_key_frame.grid(row=2, column=2, pady=2, padx=(5, 0))
         
         ttk.Button(api_key_frame, text="Delete API Key", 
-                   command=self.clear_api_key).pack(side=tk.LEFT)
+                   command=self.clear_api_key, width=15).pack(side=tk.LEFT)
         
         # Language selection
-        ttk.Label(main_frame, text="Language:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Language:").grid(row=3, column=0, sticky=tk.W, pady=2)
         self.language_combo = ttk.Combobox(main_frame, textvariable=self.language_var, 
                                           values=["Auto-detect"], state="readonly")
-        self.language_combo.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=5, padx=(5, 0))
+        self.language_combo.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=2, padx=(5, 0))
         
         # Model selection
-        ttk.Label(main_frame, text="Model:").grid(row=4, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Model:").grid(row=4, column=0, sticky=tk.W, pady=2)
         self.model_combo = ttk.Combobox(main_frame, textvariable=self.model_var, 
                                        values=AVAILABLE_MODELS, state="readonly")
-        self.model_combo.grid(row=4, column=1, sticky=(tk.W, tk.E), pady=5, padx=(5, 0))
+        self.model_combo.grid(row=4, column=1, sticky=(tk.W, tk.E), pady=2, padx=(5, 0))
         
         # Options frame
-        options_frame = ttk.LabelFrame(main_frame, text="Options", padding="10")
-        options_frame.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
-        options_frame.columnconfigure(3, weight=1)
+        options_frame = ttk.Frame(main_frame)
+        options_frame.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        options_frame.columnconfigure(2, weight=1)  # Make column 2 (entry field) expand
         
-        # Checkboxes
-        ttk.Checkbutton(options_frame, text="Keep files", 
-                       variable=self.keep_files_var).grid(row=0, column=0, sticky=tk.W, padx=(0, 20))
+        # Keep files in a separate frame to not affect main alignment
+        keep_files_frame = ttk.Frame(options_frame)
+        keep_files_frame.grid(row=0, column=0, sticky=tk.W, padx=(0, 20))
+        ttk.Label(keep_files_frame, text="Keep files").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Checkbutton(keep_files_frame, variable=self.keep_files_var).pack(side=tk.LEFT)
         
-        # Output directory
-        ttk.Label(options_frame, text="Output Dir:").grid(row=1, column=0, sticky=tk.W, pady=(10, 0))
-        self.output_dir_entry = ttk.Entry(options_frame, textvariable=self.output_dir_var, width=40)
-        self.output_dir_entry.grid(row=1, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=(10, 0), padx=(5, 0))
+        # Output directory aligned with main form fields
+        ttk.Label(options_frame, text="Output Dir:").grid(row=0, column=1, sticky=tk.W, padx=(0, 5))
+        self.output_dir_entry = ttk.Entry(options_frame, textvariable=self.output_dir_var, width=35)
+        self.output_dir_entry.grid(row=0, column=2, sticky=(tk.W, tk.E), padx=(5, 5))
         ttk.Button(options_frame, text="Browse", 
-                  command=self.browse_output_dir).grid(row=1, column=3, pady=(10, 0), padx=(5, 0))
+                  command=self.browse_output_dir, width=15).grid(row=0, column=3, padx=(0, 0))
         
         # Create notebook for results
         self.notebook = ttk.Notebook(main_frame, style='Custom.TNotebook')
-        self.notebook.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
+        self.notebook.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(5, 0))
         
         # Your Instructions tab
         self.instructions_frame = ttk.Frame(self.notebook)
@@ -505,11 +509,11 @@ class ChapterTimecodeGUI:
         
         # Create progress bar
         self.progress_bar = ttk.Progressbar(main_frame, mode='indeterminate')
-        self.progress_bar.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        self.progress_bar.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(5, 0))
         
         # Control buttons
         control_frame = ttk.Frame(main_frame)
-        control_frame.grid(row=8, column=0, columnspan=3, pady=(10, 0))
+        control_frame.grid(row=8, column=0, columnspan=3, pady=(5, 0))
         
         self.process_btn = ttk.Button(control_frame, text="Process Video", 
                                      command=self.process_video)
