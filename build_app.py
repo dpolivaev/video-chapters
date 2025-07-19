@@ -12,24 +12,36 @@ import platform
 from pathlib import Path
 from config import APP_VERSION
 
-def run_command(cmd, check=True, timeout=300):
+def run_command(cmd, check=True, timeout=300, env=None, interactive=False):
     """Run a shell command and return success status."""
-    print(f"▶️  {cmd[:100]}{'...' if len(cmd) > 100 else ''}")
+    print(f"▶️  {cmd}")
     try:
-        result = subprocess.run(
-            cmd, 
-            shell=True, 
-            capture_output=True, 
-            text=True, 
-            timeout=timeout
-        )
+        if interactive:
+            # Run interactively for commands that need real-time output
+            result = subprocess.run(
+                cmd, 
+                shell=True, 
+                timeout=timeout,
+                env=env
+            )
+        else:
+            # Capture output for regular commands
+            result = subprocess.run(
+                cmd, 
+                shell=True, 
+                capture_output=True, 
+                text=True, 
+                timeout=timeout,
+                env=env
+            )
+            
+            if check and result.returncode != 0:
+                print(f"❌ Error: {result.stderr}")
+                return False
+            if result.stdout:
+                print(f"✅ {result.stdout}")
         
-        if check and result.returncode != 0:
-            print(f"❌ Error: {result.stderr}")
-            return False
-        if result.stdout:
-            print(f"✅ {result.stdout}")
-        return True
+        return result.returncode == 0
     except subprocess.TimeoutExpired:
         print(f"❌ Command timed out after {timeout} seconds")
         return False
@@ -77,14 +89,14 @@ def notarize_macos_dmg(dmg_path, keychain_profile):
     # Submit DMG for notarization with --wait flag
     print("🔔 Submitting DMG for notarization...")
     cmd = f'xcrun notarytool submit "{dmg_path}" --keychain-profile {keychain_profile} --wait'
-    if not run_command(cmd, timeout=1800):  # 30 minutes timeout
+    if not run_command(cmd, timeout=1800, interactive=True):  # 30 minutes timeout, interactive
         print("❌ Notarization failed")
         return False
     
     # Staple the notarization to the DMG
     print(f"🔖 Stapling notarization to DMG...")
     cmd = f'xcrun stapler staple "{dmg_path}"'
-    if not run_command(cmd, timeout=60):
+    if not run_command(cmd, timeout=60, interactive=True):
         print("❌ Failed to staple notarization")
         return False
     
@@ -385,7 +397,7 @@ def build_gui_app(args):
             if args.notary_profile:
                 if not notarize_macos_dmg(versioned_dmg, args.notary_profile):
                     return False
-                
+    
     elif sys.platform == "win32" and args.sign:
         exe_path = f"dist/{app_name}.exe"
         
