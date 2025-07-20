@@ -482,6 +482,13 @@ class ChapterTimecodeGUI:
         self.instructions_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.instructions_frame, text="Your Instructions")
         
+        # Add Previous Instructions button next to the tab
+        instructions_header_frame = ttk.Frame(self.instructions_frame)
+        instructions_header_frame.pack(fill=tk.X, padx=5, pady=(5, 0))
+        
+        ttk.Button(instructions_header_frame, text="Previous Instructions", 
+                   command=self.show_previous_instructions_dialog).pack(side=tk.RIGHT)
+        
         # Progress tab
         self.progress_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.progress_frame, text="Progress")
@@ -565,7 +572,7 @@ class ChapterTimecodeGUI:
         text_font = (self.mono_font, int(10 * self.font_scale))
         self.instructions_text = scrolledtext.ScrolledText(parent_frame, height=12, width=80,
                                                           wrap=tk.WORD, state=tk.NORMAL, font=text_font)
-        self.instructions_text.pack(fill=tk.BOTH, expand=True)
+        self.instructions_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.instructions_text.configure(selectbackground='#0078d4', selectforeground='white')
         
         # Bind the text widget to handle tip visibility
@@ -770,6 +777,13 @@ class ChapterTimecodeGUI:
             # Create processor
             self.processor = VideoProcessor(self.log_progress)
             
+            # Get current instructions
+            custom_instructions = self.instructions_text.get(1.0, tk.END).strip()
+            
+            # Save instructions to history if they exist
+            if custom_instructions:
+                config.add_instruction_to_history(custom_instructions)
+            
             # Create options
             options = ProcessingOptions(
                 language=self.language_var.get() if self.language_var.get() != "Auto-detect" else None,
@@ -778,7 +792,7 @@ class ChapterTimecodeGUI:
                 keep_files=self.keep_files_var.get(),
                 output_dir=self.output_dir_var.get() if self.output_dir_var.get() else None,
                 show_subtitles=False,
-                custom_instructions=self.instructions_text.get(1.0, tk.END).strip()
+                custom_instructions=custom_instructions
             )
             
             # Check if stopping was requested
@@ -1423,6 +1437,154 @@ Copyright 2025 Dimitry Polivaev"""
             
         except Exception as e:
             messagebox.showerror("Error", f"Could not select text: {e}")
+    
+    def show_previous_instructions_dialog(self):
+        """Show the Previous Instructions dialog."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Previous Instructions")
+        dialog.geometry("600x500")
+        dialog.resizable(True, True)
+        
+        # Center the window
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Main frame
+        main_frame = ttk.Frame(dialog)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Settings frame
+        settings_frame = ttk.Frame(main_frame)
+        settings_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(settings_frame, text="Keep up to").pack(side=tk.LEFT)
+        
+        # Limit spinbox
+        limit_var = tk.IntVar(value=config.get_instruction_history_limit())
+        limit_spinbox = ttk.Spinbox(settings_frame, from_=1, to=50, width=5, 
+                                   textvariable=limit_var, command=lambda: self._on_limit_change(limit_var))
+        limit_spinbox.pack(side=tk.LEFT, padx=(5, 5))
+        
+        ttk.Label(settings_frame, text="versions").pack(side=tk.LEFT)
+        
+        # Separator
+        ttk.Separator(main_frame, orient='horizontal').pack(fill=tk.X, pady=10)
+        
+        # Instructions frame with scrollbar
+        instructions_frame = ttk.Frame(main_frame)
+        instructions_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Create canvas and scrollbar for instructions
+        canvas = tk.Canvas(instructions_frame)
+        scrollbar = ttk.Scrollbar(instructions_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Pack canvas and scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Get instruction history
+        history = config.get_instruction_history()
+        
+        if not history:
+            # No history message
+            no_history_label = ttk.Label(scrollable_frame, 
+                                        text="No previous instructions found.\nInstructions will be saved when you process a video.",
+                                        justify=tk.CENTER, foreground="gray")
+            no_history_label.pack(pady=20)
+        else:
+            # Create instruction entries
+            for i, entry in enumerate(reversed(history)):  # Show newest first
+                self._create_instruction_entry(scrollable_frame, entry, len(history) - 1 - i, dialog)
+        
+        # Close button
+        close_btn = ttk.Button(main_frame, text="Close", command=dialog.destroy)
+        close_btn.pack(pady=(10, 0))
+        
+        # Center the window on parent
+        dialog.update_idletasks()
+        x = (self.root.winfo_x() + (self.root.winfo_width() // 2) - 
+             (dialog.winfo_width() // 2))
+        y = (self.root.winfo_y() + (self.root.winfo_height() // 2) - 
+             (dialog.winfo_height() // 2))
+        dialog.geometry(f"+{x}+{y}")
+    
+    def _create_instruction_entry(self, parent, entry, original_index, dialog):
+        """Create an instruction entry in the dialog."""
+        from datetime import datetime
+        
+        # Parse timestamp
+        try:
+            dt = datetime.fromisoformat(entry["timestamp"])
+            timestamp_str = dt.strftime("%Y-%m-%d %H:%M")
+        except:
+            timestamp_str = "Unknown time"
+        
+        # Entry frame
+        entry_frame = ttk.Frame(parent)
+        entry_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Timestamp label
+        timestamp_label = ttk.Label(entry_frame, text=timestamp_str, 
+                                   font=("TkDefaultFont", 9, "bold"))
+        timestamp_label.pack(anchor=tk.W)
+        
+        # Instruction text widget
+        text_font = (self.mono_font, int(9 * self.font_scale))
+        instruction_text = scrolledtext.ScrolledText(entry_frame, height=4, width=70,
+                                                    wrap=tk.WORD, state=tk.DISABLED, font=text_font)
+        instruction_text.pack(fill=tk.X, pady=(2, 5))
+        instruction_text.configure(selectbackground='#0078d4', selectforeground='white')
+        
+        # Insert content
+        instruction_text.config(state=tk.NORMAL)
+        instruction_text.insert(tk.END, entry["content"])
+        instruction_text.config(state=tk.DISABLED)
+        
+        # Buttons frame
+        buttons_frame = ttk.Frame(entry_frame)
+        buttons_frame.pack(fill=tk.X)
+        
+        # Select button
+        select_btn = ttk.Button(buttons_frame, text="Select", 
+                               command=lambda: self._select_instruction(entry["content"], dialog))
+        select_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Delete button
+        delete_btn = ttk.Button(buttons_frame, text="Delete", 
+                               command=lambda: self._delete_instruction(original_index, entry_frame))
+        delete_btn.pack(side=tk.LEFT)
+    
+    def _on_limit_change(self, limit_var):
+        """Handle limit change in the dialog."""
+        try:
+            new_limit = limit_var.get()
+            if 1 <= new_limit <= 50:
+                config.set_instruction_history_limit(new_limit)
+        except tk.TclError:
+            # Invalid value, ignore
+            pass
+    
+    def _select_instruction(self, content, dialog):
+        """Select an instruction and load it into the main text widget."""
+        self.instructions_text.delete(1.0, tk.END)
+        self.instructions_text.insert(1.0, content)
+        self.instructions_tip_label.pack_forget()  # Hide tip
+        dialog.destroy()
+    
+    def _delete_instruction(self, index, entry_frame):
+        """Delete an instruction from history."""
+        if messagebox.askyesno("Confirm Delete", "Are you sure you want to delete this instruction?"):
+            config.delete_instruction_from_history(index)
+            entry_frame.destroy()
 
 def main():
     """Main function for GUI application."""

@@ -60,7 +60,9 @@ class Config:
             "output_dir": "",
             "window_geometry": "800x600",
             "last_url": "",
-            "custom_instructions": ""
+            "custom_instructions": "",
+            "instruction_history": [],
+            "instruction_history_limit": 10
         }
         
         if CONFIG_FILE.exists():
@@ -286,6 +288,74 @@ class Config:
             self._save_settings()
         except Exception as e:
             raise ValueError(f"Could not import settings: {e}")
+    
+    def get_instruction_history(self) -> list:
+        """Get instruction history."""
+        return self.get_setting("instruction_history", [])
+    
+    def add_instruction_to_history(self, instruction: str):
+        """Add instruction to history, moving existing ones to top if found."""
+        if not instruction.strip():
+            return  # Don't save empty instructions
+            
+        history = self.get_instruction_history()
+        limit = self.get_instruction_history_limit()
+        
+        from datetime import datetime
+        
+        # Check if this instruction already exists in history
+        existing_index = None
+        for i, entry in enumerate(history):
+            if entry["content"] == instruction:
+                existing_index = i
+                break
+        
+        if existing_index is not None:
+            # Move existing instruction to top (most recent)
+            existing_entry = history.pop(existing_index)
+            # Update timestamp to current time
+            existing_entry["timestamp"] = datetime.now().isoformat()
+            history.append(existing_entry)
+        else:
+            # Add new instruction
+            new_entry = {
+                "content": instruction,
+                "timestamp": datetime.now().isoformat(),
+                "preview": instruction[:100] + "..." if len(instruction) > 100 else instruction
+            }
+            history.append(new_entry)
+        
+        # Keep only the most recent entries up to the limit
+        if len(history) > limit:
+            history = history[-limit:]
+        
+        self.set_setting("instruction_history", history)
+    
+    def get_instruction_history_limit(self) -> int:
+        """Get instruction history limit."""
+        return self.get_setting("instruction_history_limit", 10)
+    
+    def set_instruction_history_limit(self, limit: int):
+        """Set instruction history limit and clean up if needed."""
+        if limit < 1:
+            limit = 1
+        elif limit > 50:
+            limit = 50
+            
+        self.set_setting("instruction_history_limit", limit)
+        
+        # Clean up history if new limit is smaller
+        history = self.get_instruction_history()
+        if len(history) > limit:
+            history = history[-limit:]
+            self.set_setting("instruction_history", history)
+    
+    def delete_instruction_from_history(self, index: int):
+        """Delete instruction from history by index."""
+        history = self.get_instruction_history()
+        if 0 <= index < len(history):
+            history.pop(index)
+            self.set_setting("instruction_history", history)
 
 # Global config instance
 config = Config() 
