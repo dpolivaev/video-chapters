@@ -475,6 +475,9 @@ class ChapterTimecodeGUI:
         self.notebook = ttk.Notebook(main_frame, style='Custom.TNotebook')
         self.notebook.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(5, 0))
         
+        # Bind tab selection to focus the appropriate text widget
+        self.notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
+        
         # Your Instructions tab
         self.instructions_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.instructions_frame, text="Your Instructions")
@@ -545,9 +548,7 @@ class ChapterTimecodeGUI:
     def create_progress_tab(self, parent_frame):
         """Create and configure the progress tab."""
 
-        self.progress_text.configure(selectbackground='#0078d4', selectforeground='white')
-        self.progress_text.bind('<Key>', self._on_text_key)
-        self.progress_text.bind('<Control-Key>', self._on_text_key)
+        self.progress_text.configure(selectbackground='#0078d4', selectforeground='white', state=tk.DISABLED)
         self.progress_text.bind('<Button-2>', self._on_text_paste)
         self.progress_text.bind('<Button-3>', self._on_text_paste)
         self.progress_text.bind('<MouseWheel>', self._on_mousewheel)
@@ -590,11 +591,9 @@ class ChapterTimecodeGUI:
         """Create and configure the subtitles tab."""
         text_font = (self.mono_font, int(10 * self.font_scale))
         self.subtitles_text = scrolledtext.ScrolledText(parent_frame, height=12, width=80,
-                                                        wrap=tk.WORD, state=tk.NORMAL, font=text_font)
+                                                        wrap=tk.WORD, state=tk.DISABLED, font=text_font)
         self.subtitles_text.pack(fill=tk.BOTH, expand=True)
         self.subtitles_text.configure(selectbackground='#0078d4', selectforeground='white')
-        self.subtitles_text.bind('<Key>', self._on_text_key)
-        self.subtitles_text.bind('<Control-Key>', self._on_text_key)
         self.subtitles_text.bind('<Button-2>', self._on_text_paste)
         self.subtitles_text.bind('<Button-3>', self._on_text_paste)
         self.subtitles_text.bind('<MouseWheel>', self._on_mousewheel)
@@ -608,11 +607,9 @@ class ChapterTimecodeGUI:
         """Create and configure the chapters tab."""
         text_font = (self.mono_font, int(10 * self.font_scale))
         self.chapters_text = scrolledtext.ScrolledText(parent_frame, height=12, width=80,
-                                                       wrap=tk.WORD, state=tk.NORMAL, font=text_font)
+                                                       wrap=tk.WORD, state=tk.DISABLED, font=text_font)
         self.chapters_text.pack(fill=tk.BOTH, expand=True)
         self.chapters_text.configure(selectbackground='#0078d4', selectforeground='white')
-        self.chapters_text.bind('<Key>', self._on_text_key)
-        self.chapters_text.bind('<Control-Key>', self._on_text_key)
         self.chapters_text.bind('<Button-2>', self._on_text_paste)
         self.chapters_text.bind('<Button-3>', self._on_text_paste)
         self.chapters_text.bind('<MouseWheel>', self._on_mousewheel)
@@ -865,32 +862,42 @@ class ChapterTimecodeGUI:
         
     def append_progress(self, message: str):
         """Append message to progress text."""
+        self.progress_text.config(state=tk.NORMAL)
         self.progress_text.insert(tk.END, message + "\n")
         self.progress_text.see(tk.END)
+        self.progress_text.config(state=tk.DISABLED)
         
     def show_subtitles(self, subtitle_info):
         """Show subtitles and switch to subtitles tab."""
+        self.subtitles_text.config(state=tk.NORMAL)
         self.subtitles_text.delete(1.0, tk.END)
         self.subtitles_text.insert(tk.END, subtitle_info.content)
+        self.subtitles_text.config(state=tk.DISABLED)
         self.notebook.select(2)  # Switch to subtitles tab (index 2)
         
     def show_chapters(self, gemini_response):
         """Show chapters and switch to chapters tab."""
+        self.chapters_text.config(state=tk.NORMAL)
         self.chapters_text.delete(1.0, tk.END)
         self.chapters_text.insert(tk.END, gemini_response)
+        self.chapters_text.config(state=tk.DISABLED)
         self.notebook.select(3)  # Switch to chapters tab (index 3)
         
     def show_results(self, subtitle_info, gemini_response):
         """Show processing results."""
         # Show subtitles
         if subtitle_info:
+            self.subtitles_text.config(state=tk.NORMAL)
             self.subtitles_text.delete(1.0, tk.END)
             self.subtitles_text.insert(tk.END, subtitle_info.content)
+            self.subtitles_text.config(state=tk.DISABLED)
             
         # Show chapters
         if gemini_response:
+            self.chapters_text.config(state=tk.NORMAL)
             self.chapters_text.delete(1.0, tk.END)
             self.chapters_text.insert(tk.END, gemini_response)
+            self.chapters_text.config(state=tk.DISABLED)
             
         self.update_status("Processing completed successfully!")
         
@@ -913,24 +920,24 @@ class ChapterTimecodeGUI:
         event.widget.yview_scroll(int(delta), "units")
         return "break"
         
-    def _on_text_key(self, event):
-        """Handle key events for read-only text widgets (allow selection, prevent editing)."""
-        # Allow selection keys
-        if event.keysym in ('Left', 'Right', 'Up', 'Down', 'Home', 'End', 'Prior', 'Next',
-                           'Control_L', 'Control_R', 'Shift_L', 'Shift_R', 'Alt_L', 'Alt_R'):
-            return
-        
-        # Allow copy operations
-        if event.state & 0x4:  # Control key pressed
-            if event.keysym in ('c', 'C', 'a', 'A'):  # Ctrl+C (copy) or Ctrl+A (select all)
-                return
-        
-        # Block all other keys
-        return "break"
+
         
     def _on_text_paste(self, event):
         """Block paste operations in read-only text widgets."""
         return "break"
+        
+    def _on_tab_changed(self, event):
+        """Focus the appropriate text widget when tab changes."""
+        selected_tab = self.notebook.index(self.notebook.select())
+        
+        if selected_tab == 0:  # Instructions tab
+            self.instructions_text.focus_set()
+        elif selected_tab == 1:  # Progress tab
+            self.progress_text.focus_set()
+        elif selected_tab == 2:  # Subtitles tab
+            self.subtitles_text.focus_set()
+        elif selected_tab == 3:  # Chapters tab
+            self.chapters_text.focus_set()
         
     def _on_drag_motion(self, event):
         """Handle drag motion for auto-scrolling during text selection."""
@@ -984,9 +991,17 @@ class ChapterTimecodeGUI:
         
     def clear_results(self):
         """Clear all result text areas."""
+        self.progress_text.config(state=tk.NORMAL)
         self.progress_text.delete(1.0, tk.END)
+        self.progress_text.config(state=tk.DISABLED)
+        
+        self.subtitles_text.config(state=tk.NORMAL)
         self.subtitles_text.delete(1.0, tk.END)
+        self.subtitles_text.config(state=tk.DISABLED)
+        
+        self.chapters_text.config(state=tk.NORMAL)
         self.chapters_text.delete(1.0, tk.END)
+        self.chapters_text.config(state=tk.DISABLED)
         
     def copy_current_tab(self):
         """Copy content from the currently selected tab to clipboard."""
