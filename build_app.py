@@ -283,26 +283,41 @@ def generate_platform_icons():
         print(f"❌ Error generating icons: {e}")
         return False
 
+def get_icon_flag_and_data(build_dir, platform_name):
+    """Return icon flag and any extra --add-data for the platform."""
+    if platform_name == "darwin":
+        icon_path = build_dir / "icon.icns"
+        return (f"--icon={icon_path}" if icon_path.exists() else "", [])
+    elif platform_name == "win32":
+        icon_path = build_dir / "icon.ico"
+        add_data = [f'--add-data "build/icon.ico:."'] if icon_path.exists() else []
+        return (f"--icon={icon_path.absolute()}" if icon_path.exists() else "", add_data)
+    else:
+        icon_path = build_dir / "icon.png"
+        return (f"--icon={icon_path}" if icon_path.exists() else "", [])
+
+
 def build_gui_app(args):
     """Build the GUI application using PyInstaller's built-in signing."""
     print("🚀 Building GUI application...")
-    
+
     # Generate platform-specific icons first
     if not generate_platform_icons():
         print("⚠️  Icon generation failed - continuing without icons")
-    
-    # Determine platform-specific settings and prepare all variable elements
+
+    # Set up common variables
     build_dir = Path("build")
+    app_name = "Chapter Timecodes"
+    dist_dir = Path("dist")
+    dist_dir.mkdir(exist_ok=True)
     dist_path = "dist"
     work_path = "build/pyiwork"
-    app_name = "Chapter Timecodes"
-    icon_flag = ""
     extra_flags = []
 
+    # Platform-specific adjustments
     if sys.platform == "darwin":
-        icon_path = build_dir / "icon.icns"
-        if icon_path.exists():
-            icon_flag = f"--icon={icon_path}"
+        icon_flag, add_data = get_icon_flag_and_data(build_dir, "darwin")
+        extra_flags.extend(add_data)
         if args.sign and args.signing_identity:
             full_identity = find_signing_identity(args.signing_identity)
             if not full_identity:
@@ -316,38 +331,29 @@ def build_gui_app(args):
                 print("❌ entitlements.plist not found - required for macOS signing")
                 return False
     elif sys.platform == "win32":
-        icon_path = build_dir / "icon.ico"
-        if icon_path.exists():
-            icon_flag = f"--icon={icon_path.absolute()}"
+        icon_flag, add_data = get_icon_flag_and_data(build_dir, "win32")
+        extra_flags.extend(add_data)
+        dist_path = "build/winapp"
+        work_path = "build/pyiwork"
     else:
-        icon_path = build_dir / "icon.png"
-        if icon_path.exists():
-            icon_flag = f"--icon={icon_path}"
+        icon_flag, add_data = get_icon_flag_and_data(build_dir, sys.platform)
+        extra_flags.extend(add_data)
 
     # Construct the full PyInstaller command as a single string
     cmd = (
         f'pyinstaller --onedir --windowed --name "{app_name}" {icon_flag} '
-        f'--add-data "LICENSE:." --distpath "{dist_path}" --workpath "{work_path}" '
+        f'--add-data "LICENSE:." '
+        f'--distpath "{dist_path}" --workpath "{work_path}" '
         f'{" ".join(extra_flags)} gui.py'
     )
-    
+
+    # Platform-specific post-build steps
     if sys.platform == "win32":
-        # --- Windows directory build ---
-        build_root = Path("build/winapp")
+        build_root = Path(dist_path)
         app_dir = build_root / app_name
-        dist_dir = Path("dist")
-        dist_dir.mkdir(exist_ok=True)
         # Clean up previous build
         if build_root.exists():
             shutil.rmtree(build_root)
-        # PyInstaller --onedir output to build/winapp/Chapter Timecodes
-        icon_path = build_dir / "icon.ico"
-        icon_flag = f"--icon={icon_path.absolute()}" if icon_path.exists() else ""
-        cmd = (
-            f'pyinstaller --onedir --windowed --name "{app_name}" {icon_flag} '
-            f'--add-data "LICENSE:." '
-            f'--distpath "{build_root}" --workpath "build/pyiwork" gui.py'
-        )
         if not run_command(cmd, timeout=1800):
             print("❌ Failed to build GUI application")
             return False
@@ -356,50 +362,40 @@ def build_gui_app(args):
         if args.sign:
             if not sign_windows_exe(exe_path):
                 return False
-        # Zip the Chapter Timecodes folder into dist/ as ChapterTimecodes-v{APP_VERSION}.zip
+        # Zip the Chapter Timecodes folder into dist/ as ChapterTimecodes-v{APP_VERSION}-windows.zip
         zip_name = f"ChapterTimecodes-v{APP_VERSION}-windows.zip"
         zip_path = dist_dir / zip_name
-        # Remove existing zip if present
         if zip_path.exists():
             zip_path.unlink()
-        # Zip the folder so that Chapter Timecodes/ is the root in the zip
         import zipfile
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for root, dirs, files in os.walk(app_dir):
                 for file in files:
                     file_path = Path(root) / file
-                    # arcname ensures Chapter Timecodes/ is the root in the zip
                     arcname = str(file_path.relative_to(build_root))
                     zipf.write(file_path, arcname)
         print(f"✅ Created {zip_path}")
         return True
-    
-    # PyInstaller can take a long time
+
     if not run_command(cmd, timeout=1800):
         print("❌ Failed to build GUI application")
         return False
-    
+
     print("✅ GUI application built successfully!")
-    
-    # For macOS, verify the signing worked
+
+    # macOS post-build steps
     if sys.platform == "darwin" and args.sign:
         app_path = f"dist/{app_name}.app"
-        
         print("🔍 Verifying signing...")
-        cmd = f'codesign -vv --strict "{app_path}"'
-        if not run_command(cmd, timeout=60):
+        verify_cmd = f'codesign -vv --strict "{app_path}"'
+        if not run_command(verify_cmd, timeout=60):
             print("❌ Signing verification failed")
             return False
         print("✅ Signing verified successfully")
-        
-        # Create DMG if requested or if notarization is requested
         if args.create_dmg or args.notary_profile:
             dmg_path = f"dist/{app_name}.dmg"
-            
             if not create_dmg(app_path, dmg_path):
                 return False
-                
-            # Get architecture for DMG name
             arch = platform.machine()
             if arch == "x86_64":
                 arch_suffix = "x64"
@@ -407,41 +403,20 @@ def build_gui_app(args):
                 arch_suffix = "arm64"
             else:
                 arch_suffix = arch
-            
-            # Rename DMG to versioned name
             versioned_dmg = f"dist/ChapterTimecodes-v{APP_VERSION}-{arch_suffix}.dmg"
             Path(dmg_path).rename(versioned_dmg)
             print(f"✅ Renamed DMG to: {versioned_dmg}")
-                
-            # Sign the DMG file with versioned name if signing is enabled
             if args.sign:
                 print(f"🔐 Signing DMG file...")
-                cmd = f'codesign --sign "{full_identity}" "{versioned_dmg}"'
-                if not run_command(cmd, timeout=120):
+                sign_cmd = f'codesign --sign "{full_identity}" "{versioned_dmg}"'
+                if not run_command(sign_cmd, timeout=120):
                     print("❌ Failed to sign DMG")
                     return False
                 print("✅ DMG signed successfully")
-            
-            # Notarize DMG if profile provided
             if args.notary_profile:
                 if not notarize_macos_dmg(versioned_dmg, args.notary_profile):
                     return False
-    
-    elif sys.platform == "win32" and args.sign:
-        exe_path = f"dist/{app_name}.exe"
-        
-        if not sign_windows_exe(exe_path):
-            return False
-    
-    # Rename final outputs to include version
-    if sys.platform == "win32":
-        original_exe = f"dist/{app_name}.exe"
-        versioned_exe = f"dist/ChapterTimecodes-v{APP_VERSION}.exe"
-        if Path(original_exe).exists():
-            Path(original_exe).rename(versioned_exe)
-            print(f"✅ Renamed to: {versioned_exe}")
     elif sys.platform == "darwin" and (args.create_dmg or args.notary_profile) and not args.sign:
-        # Handle DMG renaming when not signing
         original_dmg = f"dist/{app_name}.dmg"
         if Path(original_dmg).exists():
             arch = platform.machine()
@@ -451,16 +426,12 @@ def build_gui_app(args):
                 arch_suffix = "arm64"
             else:
                 arch_suffix = arch
-            
             versioned_dmg = f"dist/ChapterTimecodes-v{APP_VERSION}-{arch_suffix}.dmg"
             Path(original_dmg).rename(versioned_dmg)
             print(f"✅ Renamed DMG to: {versioned_dmg}")
-            
-            # Notarize DMG if profile provided but no signing
             if args.notary_profile:
                 if not notarize_macos_dmg(versioned_dmg, args.notary_profile):
                     return False
-    
     return True
 
 def clean_build_files():

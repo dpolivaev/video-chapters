@@ -92,52 +92,16 @@ class ChapterTimecodeGUI:
         """Set up the application icon for different platforms."""
         try:
             # Handle both development and packaged environments
-            if hasattr(sys, '_MEIPASS'):
-                # PyInstaller packaged environment
-                base_path = Path(sys._MEIPASS)
-            else:
-                # Development environment
-                base_path = Path(".")
-            
-            # Platform-specific icon handling
             if sys.platform == "win32":
-                # Windows - use .ico file
-                # In PyInstaller, the icon should already be embedded in the executable
-                # But we can still try to set it for the window
-                icon_path = base_path / "icon.ico"
-                if icon_path.exists():
-                    self.root.iconbitmap(str(icon_path))
-                else:
-                    # Try alternative locations
-                    alt_paths = [
-                        base_path / "assets" / "icon.ico",
-                        base_path / "icons" / "icon.ico",
-                        Path("icon.ico"),
-                        Path("build/icon.ico")  # Add build directory path
-                    ]
-                    for alt_path in alt_paths:
-                        if alt_path.exists():
-                            self.root.iconbitmap(str(alt_path))
-                            break
-                    else:
-                        # If no .ico file found, try using PNG as fallback
-                        png_path = base_path / "icon.png"
-                        if png_path.exists():
-                            try:
-                                icon_image = tk.PhotoImage(file=str(png_path))
-                                self.root.iconphoto(True, icon_image)
-                            except Exception as png_error:
-                                print(f"Warning: Could not load PNG icon: {png_error}")
-                        else:
-                            # Try build directory for PNG
-                            build_png = Path("build/icon.png")
-                            if build_png.exists():
-                                try:
-                                    icon_image = tk.PhotoImage(file=str(build_png))
-                                    self.root.iconphoto(True, icon_image)
-                                except Exception as png_error:
-                                    print(f"Warning: Could not load PNG icon from build: {png_error}")
-                            
+                exe_dir = Path(sys.executable).parent
+                fallback_paths = [
+                    Path("build/icon.ico"),
+                    exe_dir / "_internal" / "icon.ico",
+                ]
+                for alt_path in fallback_paths:
+                    if alt_path.exists():
+                        self.root.iconbitmap(str(alt_path))
+                        break
             elif sys.platform == "darwin":
                 # macOS - use .icns file via iconphoto (iconbitmap doesn't work well on macOS)
                 icon_path = base_path / "icon.icns"
