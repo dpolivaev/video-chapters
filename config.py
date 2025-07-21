@@ -26,12 +26,12 @@ from core import DEFAULT_MODEL, AVAILABLE_MODELS
 
 # Application information
 APP_NAME = "timecode-generator"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 APP_TITLE = "Chapter Timecode Generator"
 APP_AUTHOR = "Dimitry Polivaev"
 APP_COPYRIGHT = "Copyright 2025 Dimitry Polivaev"
 APP_LICENSE = "Apache License 2.0"
-APP_URL = "https://github.com/dimitrypolivaev/timecodes"
+APP_URL = "https://github.com/dpolivaev/video-chapters"
 
 # Application name for keyring
 CONFIG_DIR = Path.home() / ".timecode-generator"
