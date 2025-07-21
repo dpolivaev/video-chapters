@@ -153,7 +153,7 @@ def sign_windows_exe(exe_path):
     # Run the codesign.bat script
     cmd = f'"{codesign_script.absolute()}"'
     
-    if not run_command(cmd):
+    if not run_command(cmd, interactive=True):
         print("❌ Failed to sign Windows executable")
         return False
         
@@ -306,26 +306,49 @@ def build_gui_app(args):
         icon_flag = f"--icon={icon_path}" if icon_path.exists() else ""
         app_name = "Chapter Timecodes"
     
-    # Build command - use PyInstaller's built-in signing for macOS
-    # Use --onefile for Windows/Linux to avoid subdirectory, --onedir for macOS for better performance
-    if sys.platform == "darwin":
-        # macOS uses --onedir which handles local modules better
-        cmd = f'pyinstaller --onedir --windowed --name "{app_name}" {icon_flag} --add-data "LICENSE:."'
-    else:
-        # Windows/Linux use --onefile which needs explicit module inclusion
-        # For Windows, ensure icon is properly embedded by using absolute path
-        if sys.platform == "win32" and icon_flag:
-            # Use absolute path for Windows icon to ensure proper embedding
-            icon_abs_path = icon_path.absolute()
-            icon_flag = f"--icon={icon_abs_path}"
-        
-        cmd = f'pyinstaller --onefile --windowed --name "{app_name}" {icon_flag} --add-data "LICENSE:." --add-data "config.py:." --add-data "core.py:."'
-        
-        # Add icon as data for runtime access (in addition to embedding)
-        if icon_flag and icon_path.exists():
-            cmd += f' --add-data "{icon_path}:."'
-
-
+    if sys.platform == "win32":
+        # --- Windows directory build ---
+        build_root = Path("build/winapp")
+        app_dir = build_root / app_name
+        dist_dir = Path("dist")
+        dist_dir.mkdir(exist_ok=True)
+        # Clean up previous build
+        if build_root.exists():
+            shutil.rmtree(build_root)
+        # PyInstaller --onedir output to build/winapp/Chapter Timecodes
+        icon_path = build_dir / "icon.ico"
+        icon_flag = f"--icon={icon_path.absolute()}" if icon_path.exists() else ""
+        cmd = (
+            f'pyinstaller --onedir --windowed --name "{app_name}" {icon_flag} '
+            f'--add-data "LICENSE:." '
+            f'--distpath "{build_root}" --workpath "build/pyiwork" gui.py'
+        )
+        if not run_command(cmd, timeout=1800):
+            print("❌ Failed to build GUI application")
+            return False
+        # Sign the exe if requested
+        exe_path = app_dir / f"{app_name}.exe"
+        if args.sign:
+            if not sign_windows_exe(exe_path):
+                return False
+        # Zip the Chapter Timecodes folder into dist/ as ChapterTimecodes-v{APP_VERSION}.zip
+        zip_name = f"ChapterTimecodes-v{APP_VERSION}.zip"
+        zip_path = dist_dir / zip_name
+        # Remove existing zip if present
+        if zip_path.exists():
+            zip_path.unlink()
+        # Zip the folder so that Chapter Timecodes/ is the root in the zip
+        import zipfile
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(app_dir):
+                for file in files:
+                    file_path = Path(root) / file
+                    # arcname ensures Chapter Timecodes/ is the root in the zip
+                    arcname = str(file_path.relative_to(build_root))
+                    zipf.write(file_path, arcname)
+        print(f"✅ Created {zip_path}")
+        return True
+    
     # Add macOS signing parameters directly to PyInstaller
     if sys.platform == "darwin" and args.sign and args.signing_identity:
         full_identity = find_signing_identity(args.signing_identity)
