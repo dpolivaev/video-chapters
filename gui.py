@@ -1252,58 +1252,54 @@ Copyright 2025 Dimitry Polivaev"""
 
 
     def menu_copy(self):
-        """Handle Copy from Edit menu."""
         focused_widget = self.root.focus_get()
-        
-        if focused_widget == self.url_entry:
-            self.copy_entry_field(self.url_entry)
-        elif focused_widget == self.api_key_entry:
-            # Don't allow copying from API key field
-            messagebox.showwarning("Security", "Cannot copy from API key field for security reasons.")
-        elif focused_widget == self.output_dir_entry:
-            self.copy_entry_field(self.output_dir_entry)
-        elif focused_widget in [self.progress_text, self.subtitles_text, self.chapters_text]:
+        entry_widgets = [self.url_entry, self.api_key_entry, self.output_dir_entry]
+        text_widgets = [self.instructions_text, self.progress_text, self.subtitles_text, self.chapters_text]
+
+        if focused_widget in entry_widgets:
+            if focused_widget == self.api_key_entry:
+                # Don't allow copying from API key field
+                messagebox.showwarning("Security", "Cannot copy from API key field for security reasons.")
+            else:
+                self.copy_entry_field(focused_widget)
+        elif focused_widget in text_widgets:
             self.copy_text_selection()
         else:
             # Try to copy from currently active text widget
             self.copy_current_tab()
 
     def menu_paste(self):
-        """Handle Paste from Edit menu."""
         focused_widget = self.root.focus_get()
-        
-        if focused_widget == self.url_entry:
-            self.paste_entry_field(self.url_entry)
-        elif focused_widget == self.api_key_entry:
-            self.paste_entry_field(self.api_key_entry)
-        elif focused_widget == self.output_dir_entry:
-            self.paste_entry_field(self.output_dir_entry)
-        # Text widgets are read-only, so no paste
+        entry_widgets = [self.url_entry, self.api_key_entry, self.output_dir_entry]
+        editable_text_widgets = [self.instructions_text]
 
-    def menu_select_all(self):
-        """Handle Select All from Edit menu."""
-        focused_widget = self.root.focus_get()
-        
-        if focused_widget in [self.url_entry, self.api_key_entry, self.output_dir_entry]:
-            self.select_all_entry_field(focused_widget)
-        elif focused_widget in [self.progress_text, self.subtitles_text, self.chapters_text]:
-            self.select_all_text_widget()
+        if focused_widget in entry_widgets:
+            self.paste_entry_field(focused_widget)
+        elif focused_widget in editable_text_widgets:
+            self.paste_entry_field(focused_widget)
 
     def menu_cut(self):
-        """Handle Cut from Edit menu."""
         focused_widget = self.root.focus_get()
-        
-        if focused_widget == self.url_entry:
-            self.cut_entry_field(self.url_entry)
-        elif focused_widget == self.api_key_entry:
-            # Don't allow cutting from API key field
-            messagebox.showwarning("Security", "Cannot cut from API key field for security reasons.")
-        elif focused_widget == self.output_dir_entry:
-            self.cut_entry_field(self.output_dir_entry)
-        elif focused_widget in [self.progress_text, self.subtitles_text, self.chapters_text]:
-            # Text widgets are read-only, so no cutting allowed
-            messagebox.showwarning("Read-only", "Cannot cut from read-only text areas.")
-        # No fallback action needed
+        entry_widgets = [self.url_entry, self.api_key_entry, self.output_dir_entry]
+        editable_text_widgets = [self.instructions_text]
+
+        if focused_widget in entry_widgets:
+            if focused_widget == self.api_key_entry:
+                messagebox.showwarning("Security", "Cannot cut from API key field for security reasons.")
+            else:
+                self.cut_entry_field(focused_widget)
+        elif focused_widget in editable_text_widgets:
+            self.cut_entry_field(self.instructions_text)
+
+    def menu_select_all(self):
+        focused_widget = self.root.focus_get()
+        entry_widgets = [self.url_entry, self.api_key_entry, self.output_dir_entry]
+        text_widgets = [self.instructions_text, self.progress_text, self.subtitles_text, self.chapters_text]
+
+        if focused_widget in entry_widgets:
+            self.select_all_entry_field(focused_widget)
+        elif focused_widget in text_widgets:
+            self.select_all_text_widget()
 
     def copy_entry_field(self, entry_widget):
         """Copy selected text from entry field to clipboard."""
