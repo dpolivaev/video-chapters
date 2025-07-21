@@ -519,7 +519,7 @@ class ChapterTimecodeGUI:
         control_frame = ttk.Frame(main_frame)
         control_frame.grid(row=8, column=0, columnspan=3, pady=(5, 0))
         
-        self.process_btn = ttk.Button(control_frame, text="Process Video", 
+        self.process_btn = ttk.Button(control_frame, text="Start", 
                                      command=self.process_video)
         self.process_btn.pack(side=tk.LEFT, padx=(0, 10))
         
