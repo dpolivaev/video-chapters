@@ -26,7 +26,7 @@ from core import DEFAULT_MODEL, AVAILABLE_MODELS
 
 # Application information
 APP_NAME = "timecode-generator"
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.1.2"
 APP_TITLE = "Chapter Timecode Generator"
 APP_AUTHOR = "Dimitry Polivaev"
 APP_COPYRIGHT = "Copyright 2025 Dimitry Polivaev"
