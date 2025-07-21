@@ -849,6 +849,10 @@ class ChapterTimecodeGUI:
         self.progress_text.see(tk.END)
         self.progress_text.config(state=tk.DISABLED)
         
+        # Force GUI update to ensure debug output is visible before error dialogs
+        if "yt-dlp debug output" in message:
+            self.root.update_idletasks()
+        
     def show_subtitles(self, subtitle_info):
         """Show subtitles and switch to subtitles tab."""
         self.subtitles_text.config(state=tk.NORMAL)

@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 import yt_dlp
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
+import io
 
 # ========================================
 # CONFIGURATION
@@ -81,6 +82,23 @@ class ProcessingOptions:
         self.non_interactive = non_interactive
         self.custom_instructions = custom_instructions
 
+class YtDlpBufferLogger:
+    """Logger for capturing yt-dlp debug output in a buffer."""
+    def __init__(self):
+        self.buffer = io.StringIO()
+    def debug(self, msg):
+        self.buffer.write(f"DEBUG: {msg}\n")
+    def info(self, msg):
+        self.buffer.write(f"INFO: {msg}\n")
+    def warning(self, msg):
+        self.buffer.write(f"WARNING: {msg}\n")
+    def error(self, msg):
+        self.buffer.write(f"ERROR: {msg}\n")
+    def getvalue(self):
+        return self.buffer.getvalue()
+    def clear(self):
+        self.buffer = io.StringIO()
+
 class VideoProcessor:
     """Main class for processing video content to generate chapter timecodes."""
     
@@ -123,8 +141,9 @@ class VideoProcessor:
             Dictionary with language categories and available languages
         """
         clean_url = self._clean_url(video_url)
+        logger = YtDlpBufferLogger()
         try:
-            info_opts = {'quiet': True}
+            info_opts = {'quiet': True, 'logger': logger}
             
             with yt_dlp.YoutubeDL(info_opts) as ydl:
                 info = ydl.extract_info(clean_url, download=False)
@@ -163,6 +182,9 @@ class VideoProcessor:
                 }
                 
         except Exception as e:
+            debug_output = logger.getvalue()
+            if debug_output:
+                self.log("\n--- yt-dlp debug output ---\n" + debug_output + "--- end yt-dlp debug output ---\n")
             self.log(f"Error checking available languages: {e}")
             return {}
     
@@ -229,7 +251,8 @@ class VideoProcessor:
         self.log(f"Processing URL: {clean_url}")
         
         # Check available subtitles
-        info_opts = {'quiet': True}
+        logger = YtDlpBufferLogger()
+        info_opts = {'quiet': True, 'logger': logger}
         with yt_dlp.YoutubeDL(info_opts) as ydl:
             try:
                 info = ydl.extract_info(clean_url, download=False)
@@ -243,6 +266,9 @@ class VideoProcessor:
                 self.log(f"Selected language: {selected_lang}")
                 
             except Exception as e:
+                debug_output = logger.getvalue()
+                if debug_output:
+                    self.log("\n--- yt-dlp debug output ---\n" + debug_output + "--- end yt-dlp debug output ---\n")
                 raise ValueError(f"Error checking subtitles: {e}")
         
         # Download subtitles
@@ -253,7 +279,8 @@ class VideoProcessor:
             'subtitlesformat': 'srt',
             'skip_download': True,
             'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
-            'quiet': True
+            'quiet': True,
+            'logger': logger
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -281,6 +308,9 @@ class VideoProcessor:
                 )
                 
             except Exception as e:
+                debug_output = logger.getvalue()
+                if debug_output:
+                    self.log("\n--- yt-dlp debug output ---\n" + debug_output + "--- end yt-dlp debug output ---\n")
                 raise ValueError(f"Error downloading subtitles: {e}")
     
     def process_with_gemini(self, subtitle_content: str, api_key: str, 
