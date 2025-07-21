@@ -291,20 +291,45 @@ def build_gui_app(args):
     if not generate_platform_icons():
         print("⚠️  Icon generation failed - continuing without icons")
     
-    # Determine platform-specific settings
+    # Determine platform-specific settings and prepare all variable elements
     build_dir = Path("build")
-    if sys.platform == "darwin":  # macOS
+    dist_path = "dist"
+    work_path = "build/pyiwork"
+    app_name = "Chapter Timecodes"
+    icon_flag = ""
+    extra_flags = []
+
+    if sys.platform == "darwin":
         icon_path = build_dir / "icon.icns"
-        icon_flag = f"--icon={icon_path}" if icon_path.exists() else ""
-        app_name = "Chapter Timecodes"
-    elif sys.platform == "win32":  # Windows
+        if icon_path.exists():
+            icon_flag = f"--icon={icon_path}"
+        if args.sign and args.signing_identity:
+            full_identity = find_signing_identity(args.signing_identity)
+            if not full_identity:
+                print("❌ Could not find signing identity")
+                return False
+            print(f"🔐 Using PyInstaller built-in signing")
+            extra_flags.append(f'--codesign-identity "{full_identity}"')
+            if Path("entitlements.plist").exists():
+                extra_flags.append('--osx-entitlements-file entitlements.plist')
+            else:
+                print("❌ entitlements.plist not found - required for macOS signing")
+                return False
+    elif sys.platform == "win32":
         icon_path = build_dir / "icon.ico"
-        icon_flag = f"--icon={icon_path}" if icon_path.exists() else ""
-        app_name = "Chapter Timecodes"
-    else:  # Linux
+        if icon_path.exists():
+            icon_flag = f"--icon={icon_path.absolute()}"
+    else:
         icon_path = build_dir / "icon.png"
-        icon_flag = f"--icon={icon_path}" if icon_path.exists() else ""
-        app_name = "Chapter Timecodes"
+        if icon_path.exists():
+            icon_flag = f"--icon={icon_path}"
+
+    # Construct the full PyInstaller command as a single string
+    cmd = (
+        f'pyinstaller --onedir --windowed --name "{app_name}" {icon_flag} '
+        f'--add-data "LICENSE:." --distpath "{dist_path}" --workpath "{work_path}" '
+        f'{" ".join(extra_flags)} gui.py'
+    )
     
     if sys.platform == "win32":
         # --- Windows directory build ---
@@ -348,25 +373,6 @@ def build_gui_app(args):
                     zipf.write(file_path, arcname)
         print(f"✅ Created {zip_path}")
         return True
-    
-    # Add macOS signing parameters directly to PyInstaller
-    if sys.platform == "darwin" and args.sign and args.signing_identity:
-        full_identity = find_signing_identity(args.signing_identity)
-        if not full_identity:
-            print("❌ Could not find signing identity")
-            return False
-        
-        print(f"🔐 Using PyInstaller built-in signing")
-        cmd += f' --codesign-identity "{full_identity}"'
-        
-        # Add entitlements file
-        if Path("entitlements.plist").exists():
-            cmd += f' --osx-entitlements-file entitlements.plist'
-        else:
-            print("❌ entitlements.plist not found - required for macOS signing")
-            return False
-    
-    cmd += ' gui.py'
     
     # PyInstaller can take a long time
     if not run_command(cmd, timeout=1800):
