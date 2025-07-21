@@ -357,7 +357,7 @@ def build_gui_app(args):
             if not sign_windows_exe(exe_path):
                 return False
         # Zip the Chapter Timecodes folder into dist/ as ChapterTimecodes-v{APP_VERSION}.zip
-        zip_name = f"ChapterTimecodes-v{APP_VERSION}.zip"
+        zip_name = f"ChapterTimecodes-v{APP_VERSION}-windows.zip"
         zip_path = dist_dir / zip_name
         # Remove existing zip if present
         if zip_path.exists():
