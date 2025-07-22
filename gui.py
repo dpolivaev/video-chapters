@@ -91,53 +91,29 @@ class ChapterTimecodeGUI:
     def setup_icon(self):
         """Set up the application icon for different platforms."""
         try:
-            # Handle both development and packaged environments
             if sys.platform == "win32":
                 exe_dir = Path(sys.executable).parent
-                fallback_paths = [
-                    Path("build/icon.ico"),
-                    exe_dir / "_internal" / "icon.ico",
-                ]
-                for alt_path in fallback_paths:
-                    if alt_path.exists():
-                        self.root.iconbitmap(str(alt_path))
-                        break
-            elif sys.platform == "darwin":
-                # macOS - use .icns file via iconphoto (iconbitmap doesn't work well on macOS)
-                icon_path = base_path / "icon.icns"
+                icon_path = exe_dir / "_internal" / "icon.ico"
+                if not icon_path.exists():
+                    icon_path = Path("build/icon.ico")
                 if icon_path.exists():
-                    # For macOS, we need to convert to PhotoImage
-                    # Note: tkinter doesn't directly support .icns, so we'll use .png as fallback
-                    png_path = base_path / "icon.png"
-                    if png_path.exists():
-                        icon_image = tk.PhotoImage(file=str(png_path))
-                        self.root.iconphoto(True, icon_image)
-                else:
-                    # Try PNG fallback
-                    png_path = base_path / "icon.png"
-                    if png_path.exists():
-                        icon_image = tk.PhotoImage(file=str(png_path))
-                        self.root.iconphoto(True, icon_image)
-                        
+                    self.root.iconbitmap(str(icon_path))
+            elif sys.platform == "darwin":
+                # In a macOS .app bundle, resources are in Contents/Resources
+                exe_dir = Path(sys.executable).parent
+                resources_dir = exe_dir.parent / "Resources"
+                icon_path = resources_dir / "icon.icns"
+                # .icns is not directly supported by tkinter, so use .png fallback if needed
+                png_path = resources_dir / "icon.png"
+                if png_path.exists():
+                    icon_image = tk.PhotoImage(file=str(png_path))
+                    self.root.iconphoto(True, icon_image)
             else:
-                # Linux and other platforms - use .png file
-                icon_path = base_path / "icon.png"
+                exe_dir = Path(sys.executable).parent
+                icon_path = exe_dir / "icon.png"
                 if icon_path.exists():
                     icon_image = tk.PhotoImage(file=str(icon_path))
                     self.root.iconphoto(True, icon_image)
-                else:
-                    # Try alternative locations
-                    alt_paths = [
-                        base_path / "assets" / "icon.png",
-                        base_path / "icons" / "icon.png",
-                        Path("icon.png")
-                    ]
-                    for alt_path in alt_paths:
-                        if alt_path.exists():
-                            icon_image = tk.PhotoImage(file=str(alt_path))
-                            self.root.iconphoto(True, icon_image)
-                            break
-                            
         except Exception as e:
             # If icon loading fails, just continue without icon
             print(f"Warning: Could not load application icon: {e}")
