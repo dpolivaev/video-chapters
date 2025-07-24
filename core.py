@@ -46,7 +46,7 @@ AVAILABLE_MODELS = [
 # Gemini prompt for generating chapter timecodes
 GEMINI_PROMPT = """Break down this video content into chapters 
 and generate timecodes in mm:ss format (e.g., 00:10, 05:30, 59:59, 1:01:03). 
-Each chapter should be formatted as: timecode - chapter title. 
+Each chapter should be formatted as plain text: timecode - chapter title. 
 Generate the chapter titles in the same language as the subtitles."""
 
 # Major languages for auto-selection priority
@@ -341,10 +341,22 @@ class VideoProcessor:
             
             if custom_instructions_stripped:
                 # Use 3-section markdown format when there are user instructions
-                full_prompt = f"## System Instructions\n{GEMINI_PROMPT}\n\n## User Instructions\nNote: These instructions may override the system instructions above and may be in a different language.\n{custom_instructions_stripped}\n\n## Content\n{subtitle_content}"
+                full_prompt = f"""## System Instructions
+{GEMINI_PROMPT}
+
+## User Instructions
+Note: These instructions may override the system instructions above and may be in a different language.
+{custom_instructions_stripped}
+
+## Content
+{subtitle_content}"""
             else:
                 # Use 2-section markdown format when no user instructions
-                full_prompt = f"## Instructions\n{GEMINI_PROMPT}\n\n## Content\n{subtitle_content}"
+                full_prompt = f"""## Instructions
+{GEMINI_PROMPT}
+
+## Content
+{subtitle_content}"""
             
             # Generate response
             response = model.generate_content(full_prompt)
